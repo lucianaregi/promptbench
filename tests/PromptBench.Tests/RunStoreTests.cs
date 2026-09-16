@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PromptBench.Api.Comparisons;
 using PromptBench.Api.OpenRouter;
 using PromptBench.Api.Runs;
 
@@ -31,6 +32,98 @@ public sealed class RunStoreTests
     }
 
     [Fact]
+    public async Task ListsEmptyDirectory()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new RunStore(directory.Path);
+
+        var summaries = await store.ListAsync();
+
+        Assert.Empty(summaries);
+    }
+
+    [Fact]
+    public async Task ListsSummaryWithRelevantData()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new RunStore(directory.Path);
+        var result = CreateResult(Guid.NewGuid());
+        await store.SaveAsync(result);
+
+        var summary = Assert.Single(await store.ListAsync());
+
+        Assert.Equal(result.Id, summary.Id);
+        Assert.Equal("evaluation_run", summary.Type);
+        Assert.Equal("summarization-basic", summary.Evaluation);
+        Assert.Equal(result.StartedAt, summary.StartedAt);
+        Assert.Equal(["provedor/modelo:free"], summary.Models);
+        Assert.Equal("completed", summary.Status);
+        Assert.Equal(100, summary.PassRate);
+    }
+
+    [Fact]
+    public async Task ListsComparisonModelsStatusAndAggregatedPassRate()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new RunStore(directory.Path);
+        var comparison = new ComparisonResult(
+            Guid.NewGuid(),
+            "summarization-basic",
+            DateTimeOffset.Parse("2026-09-16T15:00:00Z"),
+            900,
+            "completed",
+            [
+                CreateComparisonRun("provedor/modelo-a:free", true),
+                CreateComparisonRun("provedor/modelo-b:free", false)
+            ]);
+        await store.SaveAsync(comparison);
+
+        var summary = Assert.Single(await store.ListAsync());
+
+        Assert.Equal("comparison", summary.Type);
+        Assert.Equal(
+            ["provedor/modelo-a:free", "provedor/modelo-b:free"],
+            summary.Models);
+        Assert.Equal("completed", summary.Status);
+        Assert.Equal(50, summary.PassRate);
+    }
+
+    [Fact]
+    public async Task ListsRunsFromNewestToOldest()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new RunStore(directory.Path);
+        var older = CreateResult(
+            Guid.NewGuid(),
+            DateTimeOffset.Parse("2026-09-16T12:00:00Z"));
+        var newer = CreateResult(
+            Guid.NewGuid(),
+            DateTimeOffset.Parse("2026-09-16T14:00:00Z"));
+        await store.SaveAsync(older);
+        await store.SaveAsync(newer);
+
+        var summaries = await store.ListAsync();
+
+        Assert.Equal([newer.Id, older.Id], summaries.Select(summary => summary.Id));
+    }
+
+    [Fact]
+    public async Task IgnoresInvalidFileAndPreservesValidRuns()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new RunStore(directory.Path);
+        var valid = CreateResult(Guid.NewGuid());
+        await store.SaveAsync(valid);
+        await File.WriteAllTextAsync(
+            System.IO.Path.Combine(directory.Path, "arquivo-invalido.json"),
+            "{ conteúdo inválido }");
+
+        var summary = Assert.Single(await store.ListAsync());
+
+        Assert.Equal(valid.Id, summary.Id);
+    }
+
+    [Fact]
     public async Task ReturnsNotFoundForMissingId()
     {
         using var directory = new TemporaryDirectory();
@@ -58,12 +151,14 @@ public sealed class RunStoreTests
         Assert.Null(result.Result);
     }
 
-    private static EvaluationRunResult CreateResult(Guid id) =>
+    private static EvaluationRunResult CreateResult(
+        Guid id,
+        DateTimeOffset? startedAt = null) =>
         new(
             id,
             "summarization-basic",
             "provedor/modelo:free",
-            DateTimeOffset.Parse("2026-09-16T12:00:00Z"),
+            startedAt ?? DateTimeOffset.Parse("2026-09-16T12:00:00Z"),
             450,
             [
                 new EvaluationCaseRunResult(
@@ -85,6 +180,40 @@ public sealed class RunStoreTests
                         new TokenUsage(22, 9, 31),
                         null))
             ]);
+
+    private static ComparisonRunResult CreateComparisonRun(string model, bool passed) =>
+        new(
+            Guid.NewGuid(),
+            model,
+            model,
+            "completed",
+            400,
+            20,
+            10,
+            30,
+            [
+                new EvaluationCaseRunResult(
+                    "biblioteca-aos-domingos",
+                    "A biblioteca agora também abre aos domingos.",
+                    "A biblioteca passou a abrir aos domingos.",
+                    "A biblioteca também abre aos domingos.",
+                    model,
+                    250,
+                    new TokenUsage(12, 6, 18),
+                    new EvaluatorResult(
+                        "llm_judge",
+                        "completed",
+                        passed,
+                        passed
+                            ? "A resposta preserva a informação principal."
+                            : "A resposta não preserva a informação principal.",
+                        "provedor/judge:free",
+                        "provedor/judge-real",
+                        150,
+                        new TokenUsage(8, 4, 12),
+                        null))
+            ],
+            null);
 
     private sealed class TemporaryDirectory : IDisposable
     {

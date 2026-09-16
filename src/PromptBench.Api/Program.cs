@@ -193,6 +193,24 @@ app.MapPost("/evals/{name}/comparisons", async (
     .Produces(StatusCodes.Status404NotFound)
     .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
+app.MapGet("/runs", async (RunStore runStore, CancellationToken cancellationToken) =>
+    {
+        try
+        {
+            return Results.Ok(await runStore.ListAsync(cancellationToken));
+        }
+        catch (RunStorageException exception)
+        {
+            return Results.Problem(
+                title: "Falha ao listar execuções",
+                detail: exception.Message,
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
+    })
+    .WithName("ListPersistedRuns")
+    .WithDescription("Lista resumos das execuções e comparações persistidas, da mais recente para a mais antiga.")
+    .Produces<IReadOnlyList<RunSummary>>()
+    .ProducesProblem(StatusCodes.Status500InternalServerError);
 app.MapGet("/runs/{id:guid}", async (
         Guid id,
         RunStore runStore,

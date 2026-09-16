@@ -117,7 +117,9 @@ O `llm_judge` funciona tanto nas execuções individuais quanto nas comparaçõe
 - `GET /evals` — lista nome, descrição e quantidade de casos dos evals válidos.
 - `GET /evals/{name}` — retorna o eval completo; responde 404 quando ele não existe e 422 quando o arquivo é inválido.
 - `POST /evals/{name}/runs` — executa sequencialmente todos os casos do eval no modelo OpenRouter informado.
-- POST /evals/{name}/comparisons — coloca lado a lado as execuções do mesmo eval em pelo menos dois modelos distintos.
+- `POST /evals/{name}/comparisons` — coloca lado a lado as execuções do mesmo eval em pelo menos dois modelos distintos.
+- `GET /runs` — lista resumos das execuções persistidas, da mais recente para a mais antiga.
+- `GET /runs/{id}` — retorna uma execução ou comparação persistida; responde 404 quando o ID não existe.
 
 ### Executar um Evaluation Set
 
@@ -234,6 +236,14 @@ Modelos gratuitos podem ter disponibilidade e rate limits diferentes. O PromptBe
 Ao concluir com sucesso um run individual ou uma comparação, o PromptBench gera um `Guid`, inclui esse valor no campo `id` da resposta e salva o mesmo resultado completo como JSON. O campo `type` distingue `evaluation_run` de `comparison`.
 
 Os arquivos são gravados assincronamente em `runs/<id>.json`, dentro do diretório base da aplicação. O caminho é resolvido com `AppContext.BaseDirectory`, portanto não depende do current working directory. Resultados de casos, evaluators, LLM-as-a-judge, modelos, métricas, status e falhas presentes na resposta são preservados no arquivo.
+
+Para listar resumos sem carregar outputs e resultados detalhados:
+
+```http
+GET /runs
+```
+
+Cada resumo contém ID, tipo, Evaluation Set, data/hora, modelos, status e `passRate` quando existem julgamentos concluídos. Arquivos JSON inválidos são ignorados sem impedir o retorno das execuções válidas. Um diretório vazio retorna HTTP 200 com `[]`.
 
 Para consultar um resultado persistido:
 

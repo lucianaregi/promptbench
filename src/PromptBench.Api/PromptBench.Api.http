@@ -35,5 +35,10 @@ Content-Type: application/json
 
 ###
 
+GET {{PromptBench.Api_HostAddress}}/runs
+Accept: application/json
+
+###
+
 GET {{PromptBench.Api_HostAddress}}/runs/17fcf7ea-a4a4-49ca-8c46-e02b0325d394
 Accept: application/json
