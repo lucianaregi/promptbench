@@ -1,0 +1,16 @@
+@PromptBench.Api_HostAddress = http://localhost:5146
+
+GET {{PromptBench.Api_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{PromptBench.Api_HostAddress}}/evals
+Accept: application/json
+
+###
+
+GET {{PromptBench.Api_HostAddress}}/evals/summarization-basic
+Accept: application/json
+
+###

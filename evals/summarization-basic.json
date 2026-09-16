@@ -1,0 +1,16 @@
+{
+  "name": "summarization-basic",
+  "description": "Casos básicos de avaliação para resumo de textos.",
+  "cases": [
+    {
+      "id": "biblioteca-aos-domingos",
+      "input": "A biblioteca do bairro ampliou o horário de funcionamento e agora também abre aos domingos.",
+      "expected": "A biblioteca passou a abrir aos domingos."
+    },
+    {
+      "id": "previsao-do-tempo",
+      "input": "Há previsão de chuva forte durante toda a tarde, com o céu ficando mais limpo no período da noite.",
+      "expected": "Deve chover à tarde e o céu ficará mais limpo à noite."
+    }
+  ]
+}
