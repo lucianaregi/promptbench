@@ -28,5 +28,16 @@ public sealed class OpenRouterException : Exception
 
     public OpenRouterFailureKind Kind { get; }
 
+    public string Type => Kind switch
+    {
+        OpenRouterFailureKind.Configuration => "configuration",
+        OpenRouterFailureKind.InvalidRequest => "invalid_request",
+        OpenRouterFailureKind.Authentication => "authentication",
+        OpenRouterFailureKind.RateLimit => "rate_limit",
+        OpenRouterFailureKind.Timeout => "timeout",
+        OpenRouterFailureKind.InvalidResponse => "invalid_response",
+        _ => "service_unavailable"
+    };
+
     public HttpStatusCode? UpstreamStatusCode { get; }
 }

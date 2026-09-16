@@ -60,6 +60,65 @@ public sealed class EvaluationSetLoaderTests
     }
 
     [Fact]
+    public async Task LoadsLlmJudgeConfiguration()
+    {
+        using var directory = new TemporaryDirectory();
+        await directory.WriteEvalAsync("com-judge", """
+            {
+              "name": "com-judge",
+              "description": "Avaliação com judge.",
+              "evaluation": {
+                "type": "llm_judge",
+                "judgeModel": "provedor/judge:free",
+                "criteria": "A resposta deve preservar a informação principal."
+              },
+              "cases": [
+                { "id": "caso-1", "input": "Entrada", "expected": "Resposta esperada" }
+              ]
+            }
+            """);
+        var loader = new EvaluationSetLoader(directory.Path);
+
+        var result = await loader.LoadAsync("com-judge");
+
+        Assert.Equal(EvaluationSetLoadStatus.Success, result.Status);
+        Assert.Equal("llm_judge", result.EvaluationSet?.Evaluation?.Type);
+        Assert.Equal("provedor/judge:free", result.EvaluationSet?.Evaluation?.JudgeModel);
+    }
+
+    [Theory]
+    [InlineData("outro_tipo", "provedor/judge:free", "Critério informado.")]
+    [InlineData("llm_judge", "", "Critério informado.")]
+    [InlineData("llm_judge", "provedor/judge:free", "")]
+    public async Task RejectsInvalidLlmJudgeConfiguration(
+        string type,
+        string judgeModel,
+        string criteria)
+    {
+        using var directory = new TemporaryDirectory();
+        await directory.WriteEvalAsync("judge-invalido", $$"""
+            {
+              "name": "judge-invalido",
+              "description": "Avaliação com configuração inválida.",
+              "evaluation": {
+                "type": "{{type}}",
+                "judgeModel": "{{judgeModel}}",
+                "criteria": "{{criteria}}"
+              },
+              "cases": [
+                { "id": "caso-1", "input": "Entrada", "expected": "Resposta esperada" }
+              ]
+            }
+            """);
+        var loader = new EvaluationSetLoader(directory.Path);
+
+        var result = await loader.LoadAsync("judge-invalido");
+
+        Assert.Equal(EvaluationSetLoadStatus.Invalid, result.Status);
+        Assert.NotEmpty(result.Errors);
+    }
+
+    [Fact]
     public async Task RejectsInvalidJson()
     {
         using var directory = new TemporaryDirectory();

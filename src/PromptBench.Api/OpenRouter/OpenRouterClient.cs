@@ -19,10 +19,31 @@ public sealed class OpenRouterClient
         _options = options.Value;
     }
 
-    public async Task<OpenRouterCompletion> CompleteAsync(
+    public Task<OpenRouterCompletion> CompleteAsync(
         string model,
         string prompt,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        CompleteAsync(model, prompt, null, cancellationToken);
+
+    public Task<OpenRouterCompletion> CompleteStructuredAsync(
+        string model,
+        string prompt,
+        string schemaName,
+        JsonElement schema,
+        CancellationToken cancellationToken = default) =>
+        CompleteAsync(
+            model,
+            prompt,
+            new StructuredResponseFormat(
+                "json_schema",
+                new JsonSchemaDefinition(schemaName, true, schema)),
+            cancellationToken);
+
+    private async Task<OpenRouterCompletion> CompleteAsync(
+        string model,
+        string prompt,
+        StructuredResponseFormat? responseFormat,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
@@ -33,7 +54,8 @@ public sealed class OpenRouterClient
 
         var payload = new ChatCompletionRequest(
             model,
-            [new ChatMessage("user", prompt)]);
+            [new ChatMessage("user", prompt)],
+            responseFormat);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
         {
@@ -135,7 +157,19 @@ public sealed class OpenRouterClient
 
     private sealed record ChatCompletionRequest(
         string Model,
-        IReadOnlyList<ChatMessage> Messages);
+        IReadOnlyList<ChatMessage> Messages,
+        [property: JsonPropertyName("response_format")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        StructuredResponseFormat? ResponseFormat);
+
+    private sealed record StructuredResponseFormat(
+        string Type,
+        [property: JsonPropertyName("json_schema")] JsonSchemaDefinition JsonSchema);
+
+    private sealed record JsonSchemaDefinition(
+        string Name,
+        bool Strict,
+        JsonElement Schema);
 
     private sealed record ChatMessage(string Role, string Content);
 
@@ -152,5 +186,4 @@ public sealed class OpenRouterClient
         [property: JsonPropertyName("prompt_tokens")] int? PromptTokens,
         [property: JsonPropertyName("completion_tokens")] int? CompletionTokens,
         [property: JsonPropertyName("total_tokens")] int? TotalTokens);
-
 }

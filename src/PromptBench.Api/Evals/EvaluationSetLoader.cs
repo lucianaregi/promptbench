@@ -113,6 +113,8 @@ public sealed class EvaluationSetLoader
             errors.Add("O campo 'description' é obrigatório.");
         }
 
+        ValidateEvaluation(evaluationSet.Evaluation, errors);
+
         if (evaluationSet.Cases is not { Count: > 0 })
         {
             errors.Add("O campo 'cases' deve conter pelo menos um item.");
@@ -150,6 +152,29 @@ public sealed class EvaluationSetLoader
         }
 
         return errors;
+    }
+
+    private static void ValidateEvaluation(EvaluationConfiguration? evaluation, List<string> errors)
+    {
+        if (evaluation is null)
+        {
+            return;
+        }
+
+        if (!string.Equals(evaluation.Type, "llm_judge", StringComparison.Ordinal))
+        {
+            errors.Add("O campo 'evaluation.type' deve ser 'llm_judge'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(evaluation.JudgeModel))
+        {
+            errors.Add("O campo 'evaluation.judgeModel' é obrigatório para o evaluator 'llm_judge'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(evaluation.Criteria))
+        {
+            errors.Add("O campo 'evaluation.criteria' é obrigatório para o evaluator 'llm_judge'.");
+        }
     }
 }
 

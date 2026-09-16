@@ -6,5 +6,7 @@ public sealed record EvaluationSet
 
     public required string Description { get; init; }
 
+    public EvaluationConfiguration? Evaluation { get; init; }
+
     public required IReadOnlyList<EvaluationCase> Cases { get; init; }
 }

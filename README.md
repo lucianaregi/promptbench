@@ -63,6 +63,54 @@ Um Evaluation Set reúne casos de entrada e o resultado esperado para avaliaçõ
 
 O repositório inclui o exemplo funcional `evals/summarization-basic.json`.
 
+## Avaliação com LLM-as-a-judge
+
+Um Evaluation Set pode configurar o evaluator `llm_judge` para que um segundo modelo avalie cada output produzido. O modelo judge é sempre informado explicitamente; o PromptBench não escolhe modelos automaticamente.
+
+```json
+{
+  "name": "resumo-com-judge",
+  "description": "Avaliação de resumos com apoio de um judge.",
+  "evaluation": {
+    "type": "llm_judge",
+    "judgeModel": "provider/model:free",
+    "criteria": "O resumo deve preservar as informações principais do texto original sem acrescentar informações inexistentes."
+  },
+  "cases": [
+    {
+      "id": "biblioteca-aos-domingos",
+      "input": "A biblioteca do bairro ampliou o horário de funcionamento e agora também abre aos domingos.",
+      "expected": "A biblioteca passou a abrir aos domingos."
+    }
+  ]
+}
+```
+
+Para cada caso, a geração do output e o julgamento são chamadas separadas ao OpenRouter. O prompt do judge recebe um bloco JSON delimitado com o input original, a resposta de referência, o output produzido e o critério. A resposta é solicitada com JSON Schema estrito e validada antes de ser usada.
+
+Resultado resumido do evaluator:
+
+```json
+{
+  "type": "llm_judge",
+  "status": "completed",
+  "passed": true,
+  "reason": "A resposta mantém a informação principal do texto.",
+  "requestedModel": "provider/model:free",
+  "usedModel": "provider/model:free",
+  "durationMs": 420,
+  "usage": {
+    "promptTokens": 80,
+    "completionTokens": 18,
+    "totalTokens": 98
+  },
+  "error": null
+}
+```
+
+Uma reprovação possui `status` igual a `completed` e `passed` igual a `false`. Se o judge retornar conteúdo inválido, exceder o tempo limite ou falhar no OpenRouter, o resultado terá `status` igual a `failed`, `passed` igual a `null` e detalhes técnicos seguros em `error`. Assim, uma falha do judge não é convertida em reprovação e não elimina o output produzido. Não há retry automático.
+
+O `llm_judge` funciona tanto nas execuções individuais quanto nas comparações. O PromptBench não implementa votação, pesos nem ranking automático dos modelos.
 ## Endpoints
 
 - `GET /health` — confirma que a API está funcionando.
@@ -197,4 +245,4 @@ evals/
 
 ## Roadmap
 
-Avaliação automática, scoring, ranking e escolha de vencedor são ideias para etapas futuras.
+Novos evaluators, scoring agregado, ranking e escolha de vencedor não fazem parte da implementação atual.

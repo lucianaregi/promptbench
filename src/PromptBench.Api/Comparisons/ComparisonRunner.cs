@@ -47,7 +47,7 @@ public sealed class ComparisonRunner
                     null,
                     null,
                     [],
-                    new ComparisonError(FailureType(exception.Kind), exception.Message)));
+                    new ComparisonError(exception.Type, exception.Message)));
             }
         }
 
@@ -98,17 +98,6 @@ public sealed class ComparisonRunner
 
         return results.Sum(result => selector(result.Usage!)!.Value);
     }
-
-    private static string FailureType(OpenRouterFailureKind kind) => kind switch
-    {
-        OpenRouterFailureKind.Configuration => "configuration",
-        OpenRouterFailureKind.InvalidRequest => "invalid_request",
-        OpenRouterFailureKind.Authentication => "authentication",
-        OpenRouterFailureKind.RateLimit => "rate_limit",
-        OpenRouterFailureKind.Timeout => "timeout",
-        OpenRouterFailureKind.InvalidResponse => "invalid_response",
-        _ => "service_unavailable"
-    };
 
     private static long ElapsedMilliseconds(long started) =>
         (long)Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds);

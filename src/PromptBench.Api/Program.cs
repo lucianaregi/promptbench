@@ -16,6 +16,7 @@ builder.Services.AddHttpClient<OpenRouterClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(60);
 });
 builder.Services.AddTransient<EvaluationRunner>();
+builder.Services.AddTransient<LlmJudgeEvaluator>();
 builder.Services.AddTransient<ComparisonRunner>();
 
 var app = builder.Build();

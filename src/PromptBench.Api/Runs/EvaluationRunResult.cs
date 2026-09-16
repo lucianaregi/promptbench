@@ -16,4 +16,18 @@ public sealed record EvaluationCaseRunResult(
     string Output,
     string? UsedModel,
     long DurationMs,
-    TokenUsage? Usage);
+    TokenUsage? Usage,
+    EvaluatorResult? Evaluation);
+
+public sealed record EvaluatorResult(
+    string Type,
+    string Status,
+    bool? Passed,
+    string? Reason,
+    string RequestedModel,
+    string? UsedModel,
+    long DurationMs,
+    TokenUsage? Usage,
+    EvaluatorError? Error);
+
+public sealed record EvaluatorError(string Type, string Message);

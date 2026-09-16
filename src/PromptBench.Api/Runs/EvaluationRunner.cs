@@ -7,10 +7,14 @@ namespace PromptBench.Api.Runs;
 public sealed class EvaluationRunner
 {
     private readonly OpenRouterClient _openRouterClient;
+    private readonly LlmJudgeEvaluator _llmJudgeEvaluator;
 
-    public EvaluationRunner(OpenRouterClient openRouterClient)
+    public EvaluationRunner(
+        OpenRouterClient openRouterClient,
+        LlmJudgeEvaluator llmJudgeEvaluator)
     {
         _openRouterClient = openRouterClient;
+        _llmJudgeEvaluator = llmJudgeEvaluator;
     }
 
     public async Task<EvaluationRunResult> RunAsync(
@@ -30,14 +34,24 @@ public sealed class EvaluationRunner
                 evaluationCase.Input,
                 cancellationToken);
 
+            var generationDurationMs = ElapsedMilliseconds(caseStarted);
+            var evaluation = evaluationSet.Evaluation is null
+                ? null
+                : await _llmJudgeEvaluator.EvaluateAsync(
+                    evaluationSet.Evaluation,
+                    evaluationCase,
+                    completion.Output,
+                    cancellationToken);
+
             results.Add(new EvaluationCaseRunResult(
                 evaluationCase.Id,
                 evaluationCase.Input,
                 evaluationCase.Expected,
                 completion.Output,
                 completion.Model,
-                ElapsedMilliseconds(caseStarted),
-                completion.Usage));
+                generationDurationMs,
+                completion.Usage,
+                evaluation));
         }
 
         return new EvaluationRunResult(
