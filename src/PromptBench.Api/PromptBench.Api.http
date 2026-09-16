@@ -14,3 +14,12 @@ GET {{PromptBench.Api_HostAddress}}/evals/summarization-basic
 Accept: application/json
 
 ###
+
+POST {{PromptBench.Api_HostAddress}}/evals/summarization-basic/runs
+Content-Type: application/json
+
+{
+  "model": "provider/model:free"
+}
+
+###
