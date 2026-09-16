@@ -3,11 +3,15 @@ using PromptBench.Api.OpenRouter;
 namespace PromptBench.Api.Runs;
 
 public sealed record EvaluationRunResult(
+    Guid Id,
     string Evaluation,
     string RequestedModel,
     DateTimeOffset StartedAt,
     long DurationMs,
-    IReadOnlyList<EvaluationCaseRunResult> Results);
+    IReadOnlyList<EvaluationCaseRunResult> Results) : IPersistedRunResult
+{
+    public string Type => "evaluation_run";
+}
 
 public sealed record EvaluationCaseRunResult(
     string CaseId,

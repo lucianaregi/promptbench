@@ -8,6 +8,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddSingleton(new EvaluationSetLoader(
     Path.Combine(AppContext.BaseDirectory, "evals")));
+builder.Services.AddSingleton(new RunStore(
+    Path.Combine(AppContext.BaseDirectory, "runs")));
 builder.Services.Configure<OpenRouterOptions>(
     builder.Configuration.GetSection(OpenRouterOptions.SectionName));
 builder.Services.AddHttpClient<OpenRouterClient>(client =>
@@ -81,6 +83,7 @@ app.MapPost("/evals/{name}/runs", async (
         EvaluationRunRequest? request,
         EvaluationSetLoader loader,
         EvaluationRunner runner,
+        RunStore runStore,
         CancellationToken cancellationToken) =>
     {
         if (request is null || string.IsNullOrWhiteSpace(request.Model))
@@ -112,11 +115,16 @@ app.MapPost("/evals/{name}/runs", async (
                 loadResult.EvaluationSet!,
                 request.Model,
                 cancellationToken);
+            await runStore.SaveAsync(result, cancellationToken);
             return Results.Ok(result);
         }
         catch (OpenRouterException exception)
         {
             return MapOpenRouterError(exception);
+        }
+        catch (RunStorageException exception)
+        {
+            return MapRunStorageError(exception);
         }
     })
     .WithName("RunEvaluationSet")
@@ -135,6 +143,7 @@ app.MapPost("/evals/{name}/comparisons", async (
         ComparisonRequest? request,
         EvaluationSetLoader loader,
         ComparisonRunner runner,
+        RunStore runStore,
         CancellationToken cancellationToken) =>
     {
         var validationError = ValidateModels(request?.Models, out var models);
@@ -166,7 +175,16 @@ app.MapPost("/evals/{name}/comparisons", async (
             loadResult.EvaluationSet!,
             models,
             cancellationToken);
-        return Results.Ok(result);
+
+        try
+        {
+            await runStore.SaveAsync(result, cancellationToken);
+            return Results.Ok(result);
+        }
+        catch (RunStorageException exception)
+        {
+            return MapRunStorageError(exception);
+        }
     })
     .WithName("CompareEvaluationSetModels")
     .WithDescription("Executa o mesmo evaluation set sequencialmente em pelo menos dois modelos distintos do OpenRouter.")
@@ -174,6 +192,33 @@ app.MapPost("/evals/{name}/comparisons", async (
     .ProducesProblem(StatusCodes.Status400BadRequest)
     .Produces(StatusCodes.Status404NotFound)
     .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
+
+app.MapGet("/runs/{id:guid}", async (
+        Guid id,
+        RunStore runStore,
+        CancellationToken cancellationToken) =>
+    {
+        var result = await runStore.LoadAsync(id, cancellationToken);
+
+        return result.Status switch
+        {
+            RunLoadStatus.Success => Results.Json(result.Result),
+            RunLoadStatus.NotFound => Results.NotFound(),
+            RunLoadStatus.Invalid => Results.Problem(
+                title: "Execução persistida inválida",
+                detail: "O resultado armazenado não contém um JSON válido.",
+                statusCode: StatusCodes.Status500InternalServerError),
+            _ => Results.Problem(
+                title: "Falha ao consultar execução",
+                detail: "Não foi possível ler o resultado armazenado.",
+                statusCode: StatusCodes.Status500InternalServerError)
+        };
+    })
+    .WithName("GetPersistedRun")
+    .WithDescription("Retorna uma execução ou comparação persistida pelo identificador.")
+    .Produces(StatusCodes.Status200OK)
+    .Produces(StatusCodes.Status404NotFound)
+    .ProducesProblem(StatusCodes.Status500InternalServerError);
 app.Run();
 
 static string? ValidateModels(IReadOnlyList<string>? requestedModels, out IReadOnlyList<string> models)
@@ -232,4 +277,9 @@ static IResult MapOpenRouterError(OpenRouterException exception)
         statusCode: statusCode);
 }
 
+static IResult MapRunStorageError(RunStorageException exception) =>
+    Results.Problem(
+        title: "Falha ao persistir execução",
+        detail: exception.Message,
+        statusCode: StatusCodes.Status500InternalServerError);
 public partial class Program;

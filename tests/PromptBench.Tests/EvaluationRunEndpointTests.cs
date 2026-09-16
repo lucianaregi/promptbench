@@ -78,6 +78,30 @@ public sealed class EvaluationRunEndpointTests
     }
 
     [Fact]
+    public async Task PersistsCompletedRunAndReturnsItById()
+    {
+        var handler = new StubHttpMessageHandler((_, _) =>
+            Task.FromResult(OpenRouterClientTests.JsonResponse(OpenRouterClientTests.SuccessResponse)));
+        await using var factory = new OpenRouterApiFactory(handler);
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/evals/summarization-basic/runs",
+            new EvaluationRunRequest("provedor/modelo"));
+        var created = await response.Content.ReadFromJsonAsync<EvaluationRunResult>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(created);
+        var storedResponse = await client.GetAsync($"/runs/{created.Id}");
+        var stored = await storedResponse.Content.ReadFromJsonAsync<EvaluationRunResult>();
+
+        Assert.Equal(HttpStatusCode.OK, storedResponse.StatusCode);
+        Assert.NotNull(stored);
+        Assert.Equal(created.Id, stored.Id);
+        Assert.Equal(created.Results, stored.Results);
+    }
+
+    [Fact]
     public async Task ReturnsServiceUnavailableWhenApiKeyIsMissing()
     {
         await using var factory = new WebApplicationFactory<Program>();

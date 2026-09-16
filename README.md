@@ -228,6 +228,23 @@ Resposta resumida:
 Uma falha interrompe somente o run do modelo afetado; os modelos seguintes continuam sem retry automático. O status da comparação é `completed`, `partial` ou `failed`. Os totais de tokens ficam nulos quando os dados necessários não estão completos.
 
 Modelos gratuitos podem ter disponibilidade e rate limits diferentes. O PromptBench apenas apresenta resultados observáveis lado a lado: ele ainda não atribui score, ranking, vencedor nem decide qual resposta é melhor.
+
+## Persistência local dos resultados
+
+Ao concluir com sucesso um run individual ou uma comparação, o PromptBench gera um `Guid`, inclui esse valor no campo `id` da resposta e salva o mesmo resultado completo como JSON. O campo `type` distingue `evaluation_run` de `comparison`.
+
+Os arquivos são gravados assincronamente em `runs/<id>.json`, dentro do diretório base da aplicação. O caminho é resolvido com `AppContext.BaseDirectory`, portanto não depende do current working directory. Resultados de casos, evaluators, LLM-as-a-judge, modelos, métricas, status e falhas presentes na resposta são preservados no arquivo.
+
+Para consultar um resultado persistido:
+
+```http
+GET /runs/17fcf7ea-a4a4-49ca-8c46-e02b0325d394
+```
+
+O endpoint devolve o mesmo JSON produzido originalmente. Um ID inexistente retorna HTTP 404. Arquivos inválidos ou falhas de leitura retornam um erro controlado, sem expor caminhos internos ou stack traces.
+
+Não há listagem, filtros, paginação nem limpeza automática dos arquivos nesta versão.
+
 ## Estrutura
 
 ```text

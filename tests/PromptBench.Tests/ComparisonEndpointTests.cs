@@ -101,6 +101,43 @@ public sealed class ComparisonEndpointTests
     }
 
     [Fact]
+    public async Task PersistsCompletedComparisonAndReturnsItById()
+    {
+        var handler = new StubHttpMessageHandler(async (request, _) =>
+        {
+            using var payload = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+            var model = payload.RootElement.GetProperty("model").GetString()!;
+            return JsonResponse("Resumo produzido.", $"{model}-real", 12, 7, 19);
+        });
+        await using var factory = new OpenRouterApiFactory(handler);
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/evals/summarization-basic/comparisons",
+            new ComparisonRequest(["provedor/modelo-a", "provedor/modelo-b"]));
+        var created = await response.Content.ReadFromJsonAsync<ComparisonResult>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(created);
+        var storedResponse = await client.GetAsync($"/runs/{created.Id}");
+        var stored = await storedResponse.Content.ReadFromJsonAsync<ComparisonResult>();
+
+        Assert.Equal(HttpStatusCode.OK, storedResponse.StatusCode);
+        Assert.NotNull(stored);
+        Assert.Equal(created.Id, stored.Id);
+        Assert.Equal(created.Runs.Count, stored.Runs.Count);
+        Assert.Equal(
+            created.Runs.Select(run => run.Id),
+            stored.Runs.Select(run => run.Id));
+        Assert.Equal(
+            created.Runs.Select(run => run.RequestedModel),
+            stored.Runs.Select(run => run.RequestedModel));
+        Assert.Equal(
+            created.Runs.SelectMany(run => run.Results).Select(result => result.Output),
+            stored.Runs.SelectMany(run => run.Results).Select(result => result.Output));
+    }
+
+    [Fact]
     public async Task PreservesSuccessfulRunWhenAnotherModelHitsRateLimitWithoutRetry()
     {
         var requestCounts = new Dictionary<string, int>(StringComparer.Ordinal);

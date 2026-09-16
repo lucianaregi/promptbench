@@ -39,6 +39,7 @@ public sealed class ComparisonRunner
             catch (OpenRouterException exception)
             {
                 runs.Add(new ComparisonRunResult(
+                    Guid.NewGuid(),
                     model,
                     null,
                     "failed",
@@ -60,6 +61,7 @@ public sealed class ComparisonRunner
         };
 
         return new ComparisonResult(
+            Guid.NewGuid(),
             evaluationSet.Name,
             startedAt,
             ElapsedMilliseconds(comparisonStarted),
@@ -76,6 +78,7 @@ public sealed class ComparisonRunner
             .ToArray();
 
         return new ComparisonRunResult(
+            run.Id,
             run.RequestedModel,
             actualModels.Length is 1 ? actualModels[0] : null,
             "completed",

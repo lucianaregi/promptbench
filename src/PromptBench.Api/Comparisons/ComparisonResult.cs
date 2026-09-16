@@ -3,13 +3,18 @@ using PromptBench.Api.Runs;
 namespace PromptBench.Api.Comparisons;
 
 public sealed record ComparisonResult(
+    Guid Id,
     string Evaluation,
     DateTimeOffset StartedAt,
     long DurationMs,
     string Status,
-    IReadOnlyList<ComparisonRunResult> Runs);
+    IReadOnlyList<ComparisonRunResult> Runs) : IPersistedRunResult
+{
+    public string Type => "comparison";
+}
 
 public sealed record ComparisonRunResult(
+    Guid Id,
     string RequestedModel,
     string? ActualModel,
     string Status,

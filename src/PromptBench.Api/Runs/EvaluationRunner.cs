@@ -55,6 +55,7 @@ public sealed class EvaluationRunner
         }
 
         return new EvaluationRunResult(
+            Guid.NewGuid(),
             evaluationSet.Name,
             model,
             startedAt,
