@@ -14,7 +14,7 @@ public sealed class EvaluationSetLoaderTests
         var result = await loader.LoadAsync("valid");
 
         Assert.Equal(EvaluationSetLoadStatus.Success, result.Status);
-        Assert.Equal("example", result.EvaluationSet?.Name);
+        Assert.Equal("exemplo", result.EvaluationSet?.Name);
         Assert.Single(result.EvaluationSet!.Cases);
     }
 
@@ -44,10 +44,10 @@ public sealed class EvaluationSetLoaderTests
         await directory.WriteEvalAsync("duplicates", """
             {
               "name": "duplicates",
-              "description": "Contains duplicate IDs.",
+              "description": "Contém IDs duplicados.",
               "cases": [
-                { "id": "same", "input": "First", "expected": "First" },
-                { "id": "same", "input": "Second", "expected": "Second" }
+                { "id": "same", "input": "Primeiro", "expected": "Primeiro" },
+                { "id": "same", "input": "Segundo", "expected": "Segundo" }
               ]
             }
             """);
@@ -84,10 +84,10 @@ public sealed class EvaluationSetLoaderTests
 
     private const string ValidEvaluationSetJson = """
         {
-          "name": "example",
-          "description": "A valid evaluation set.",
+          "name": "exemplo",
+          "description": "Um conjunto de avaliação válido.",
           "cases": [
-            { "id": "case-1", "input": "Input", "expected": "Expected" }
+            { "id": "case-1", "input": "Entrada", "expected": "Esperado" }
           ]
         }
         """;

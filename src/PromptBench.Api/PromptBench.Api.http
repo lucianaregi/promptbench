@@ -23,3 +23,14 @@ Content-Type: application/json
 }
 
 ###
+POST {{PromptBench.Api_HostAddress}}/evals/summarization-basic/comparisons
+Content-Type: application/json
+
+{
+  "models": [
+    "provider/model-a:free",
+    "provider/model-b:free"
+  ]
+}
+
+###

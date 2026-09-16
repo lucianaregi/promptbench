@@ -1,3 +1,4 @@
+using PromptBench.Api.Comparisons;
 using PromptBench.Api.Evals;
 using PromptBench.Api.OpenRouter;
 using PromptBench.Api.Runs;
@@ -15,6 +16,7 @@ builder.Services.AddHttpClient<OpenRouterClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(60);
 });
 builder.Services.AddTransient<EvaluationRunner>();
+builder.Services.AddTransient<ComparisonRunner>();
 
 var app = builder.Build();
 
@@ -127,7 +129,82 @@ app.MapPost("/evals/{name}/runs", async (
     .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
     .ProducesProblem(StatusCodes.Status504GatewayTimeout);
 
+app.MapPost("/evals/{name}/comparisons", async (
+        string name,
+        ComparisonRequest? request,
+        EvaluationSetLoader loader,
+        ComparisonRunner runner,
+        CancellationToken cancellationToken) =>
+    {
+        var validationError = ValidateModels(request?.Models, out var models);
+
+        if (validationError is not null)
+        {
+            return Results.Problem(
+                title: "Requisição inválida",
+                detail: validationError,
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var loadResult = await loader.LoadAsync(name, cancellationToken);
+
+        if (loadResult.Status is EvaluationSetLoadStatus.NotFound)
+        {
+            return Results.NotFound();
+        }
+
+        if (loadResult.Status is EvaluationSetLoadStatus.Invalid)
+        {
+            return Results.Problem(
+                title: "Evaluation set inválido",
+                detail: "O evaluation set existe, mas não pôde ser carregado.",
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+
+        var result = await runner.RunAsync(
+            loadResult.EvaluationSet!,
+            models,
+            cancellationToken);
+        return Results.Ok(result);
+    })
+    .WithName("CompareEvaluationSetModels")
+    .WithDescription("Executa o mesmo evaluation set sequencialmente em pelo menos dois modelos distintos do OpenRouter.")
+    .Produces<ComparisonResult>()
+    .ProducesProblem(StatusCodes.Status400BadRequest)
+    .Produces(StatusCodes.Status404NotFound)
+    .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 app.Run();
+
+static string? ValidateModels(IReadOnlyList<string>? requestedModels, out IReadOnlyList<string> models)
+{
+    models = [];
+
+    if (requestedModels is null || requestedModels.Count is 0)
+    {
+        return "O campo 'models' deve conter pelo menos dois modelos distintos.";
+    }
+
+    if (requestedModels.Any(string.IsNullOrWhiteSpace))
+    {
+        return "Os identificadores dos modelos não podem ser vazios.";
+    }
+
+    var normalizedModels = requestedModels.Select(model => model.Trim()).ToArray();
+
+    if (normalizedModels.Distinct(StringComparer.OrdinalIgnoreCase).Count() != normalizedModels.Length)
+    {
+        return "A lista de modelos não pode conter identificadores duplicados.";
+    }
+
+    if (normalizedModels.Length < 2)
+    {
+        return "O campo 'models' deve conter pelo menos dois modelos distintos.";
+    }
+
+    models = normalizedModels;
+    return null;
+}
+
 
 static IResult MapOpenRouterError(OpenRouterException exception)
 {

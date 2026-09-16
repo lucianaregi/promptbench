@@ -2,7 +2,7 @@
 
 PromptBench é uma API em desenvolvimento para trabalhar com conjuntos versionados de casos de avaliação de prompts.
 
-Atualmente, a aplicação descobre e valida Evaluation Sets armazenados em JSON e pode executá-los sequencialmente em um modelo informado explicitamente por meio do OpenRouter.
+Atualmente, a aplicação descobre e valida Evaluation Sets armazenados em JSON, executa cada conjunto em um modelo e compara execuções sequenciais entre vários modelos informados explicitamente por meio do OpenRouter.
 
 ## Stack
 
@@ -69,6 +69,7 @@ O repositório inclui o exemplo funcional `evals/summarization-basic.json`.
 - `GET /evals` — lista nome, descrição e quantidade de casos dos evals válidos.
 - `GET /evals/{name}` — retorna o eval completo; responde 404 quando ele não existe e 422 quando o arquivo é inválido.
 - `POST /evals/{name}/runs` — executa sequencialmente todos os casos do eval no modelo OpenRouter informado.
+- POST /evals/{name}/comparisons — coloca lado a lado as execuções do mesmo eval em pelo menos dois modelos distintos.
 
 ### Executar um Evaluation Set
 
@@ -113,6 +114,72 @@ O campo `usedModel` registra o modelo efetivamente informado pelo OpenRouter qua
 
 A disponibilidade, os identificadores e os limites dos modelos são definidos pelo OpenRouter. Consulte o [catálogo atual de modelos](https://openrouter.ai/models) antes de executar um eval.
 
+## Comparar modelos
+
+A comparação executa o mesmo Evaluation Set sequencialmente em cada modelo, preservando outputs, duração, tokens e o modelo efetivamente utilizado quando informado pelo OpenRouter.
+
+```http
+POST /evals/summarization-basic/comparisons
+Content-Type: application/json
+
+{
+  "models": [
+    "provider/modelo-a:free",
+    "provider/modelo-b:free"
+  ]
+}
+```
+
+A requisição exige pelo menos dois modelos distintos. Identificadores duplicados, inclusive com diferenças apenas entre maiúsculas e minúsculas, são rejeitados com HTTP 400.
+
+Resposta resumida:
+
+```json
+{
+  "evaluation": "summarization-basic",
+  "startedAt": "2026-09-16T15:00:00Z",
+  "durationMs": 2500,
+  "status": "partial",
+  "runs": [
+    {
+      "requestedModel": "provider/modelo-a:free",
+      "actualModel": "provider/modelo-a:free",
+      "status": "completed",
+      "durationMs": 1100,
+      "promptTokens": 44,
+      "completionTokens": 27,
+      "totalTokens": 71,
+      "results": [
+        {
+          "caseId": "biblioteca-aos-domingos",
+          "expected": "A biblioteca passou a abrir aos domingos.",
+          "output": "A biblioteca agora também abre aos domingos.",
+          "durationMs": 500
+        }
+      ],
+      "error": null
+    },
+    {
+      "requestedModel": "provider/modelo-b:free",
+      "actualModel": null,
+      "status": "failed",
+      "durationMs": 200,
+      "promptTokens": null,
+      "completionTokens": null,
+      "totalTokens": null,
+      "results": [],
+      "error": {
+        "type": "rate_limit",
+        "message": "O limite de requisições do OpenRouter foi atingido."
+      }
+    }
+  ]
+}
+```
+
+Uma falha interrompe somente o run do modelo afetado; os modelos seguintes continuam sem retry automático. O status da comparação é `completed`, `partial` ou `failed`. Os totais de tokens ficam nulos quando os dados necessários não estão completos.
+
+Modelos gratuitos podem ter disponibilidade e rate limits diferentes. O PromptBench apenas apresenta resultados observáveis lado a lado: ele ainda não atribui score, ranking, vencedor nem decide qual resposta é melhor.
 ## Estrutura
 
 ```text
@@ -130,4 +197,4 @@ evals/
 
 ## Roadmap
 
-Comparação entre modelos, avaliação automática e scoring são ideias para etapas futuras.
+Avaliação automática, scoring, ranking e escolha de vencedor são ideias para etapas futuras.

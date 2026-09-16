@@ -68,7 +68,7 @@ public sealed class OpenRouterClient
 
             if (!response.IsSuccessStatusCode)
             {
-                throw CreateApiException(response.StatusCode, responseBody);
+                throw CreateApiException(response.StatusCode);
             }
 
             ChatCompletionResponse? completion;
@@ -100,7 +100,7 @@ public sealed class OpenRouterClient
         }
     }
 
-    private static OpenRouterException CreateApiException(HttpStatusCode statusCode, string responseBody)
+    private static OpenRouterException CreateApiException(HttpStatusCode statusCode)
     {
         var kind = statusCode switch
         {
@@ -115,32 +115,16 @@ public sealed class OpenRouterClient
 
         var message = kind switch
         {
-            OpenRouterFailureKind.InvalidRequest => ReadSafeErrorMessage(responseBody)
-                ?? "O OpenRouter rejeitou o modelo ou a requisição informada.",
+            OpenRouterFailureKind.InvalidRequest =>
+                "O OpenRouter rejeitou o modelo ou a requisição informada.",
             OpenRouterFailureKind.Authentication => "O OpenRouter rejeitou as credenciais configuradas.",
-            OpenRouterFailureKind.RateLimit => ReadSafeErrorMessage(responseBody)
-                ?? "O limite de requisições do OpenRouter foi atingido.",
+            OpenRouterFailureKind.RateLimit =>
+                "O limite de requisições do OpenRouter foi atingido.",
             OpenRouterFailureKind.Timeout => "O OpenRouter não respondeu dentro do tempo esperado.",
             _ => "O OpenRouter retornou um erro ao processar a requisição."
         };
 
         return new OpenRouterException(kind, message, statusCode);
-    }
-
-    private static string? ReadSafeErrorMessage(string responseBody)
-    {
-        try
-        {
-            var errorResponse = JsonSerializer.Deserialize<ErrorResponse>(responseBody, JsonOptions);
-            var message = errorResponse?.Error?.Message?.Trim();
-            return string.IsNullOrEmpty(message)
-                ? null
-                : message[..Math.Min(message.Length, 500)];
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
     }
 
     private static OpenRouterException InvalidResponse(Exception? innerException = null) =>
@@ -169,7 +153,4 @@ public sealed class OpenRouterClient
         [property: JsonPropertyName("completion_tokens")] int? CompletionTokens,
         [property: JsonPropertyName("total_tokens")] int? TotalTokens);
 
-    private sealed record ErrorResponse(ErrorDetail? Error);
-
-    private sealed record ErrorDetail(string? Message);
 }

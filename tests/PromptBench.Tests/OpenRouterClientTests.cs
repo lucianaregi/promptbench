@@ -16,7 +16,7 @@ public sealed class OpenRouterClientTests
             Assert.Equal(HttpMethod.Post, request.Method);
             Assert.Equal("https://openrouter.ai/api/v1/chat/completions", request.RequestUri?.ToString());
             Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
-            Assert.Equal("test-key", request.Headers.Authorization?.Parameter);
+            Assert.Equal("chave-de-teste", request.Headers.Authorization?.Parameter);
 
             using var payload = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
             Assert.Equal("provider/model", payload.RootElement.GetProperty("model").GetString());
@@ -53,7 +53,7 @@ public sealed class OpenRouterClientTests
     {
         var handler = new StubHttpMessageHandler((_, _) =>
             Task.FromResult(JsonResponse(
-                """{"error":{"message":"Model not found"}}""",
+                """{"error":{"message":"Modelo não encontrado"}}""",
                 HttpStatusCode.BadRequest)));
         var client = CreateClient(handler);
 
@@ -62,7 +62,7 @@ public sealed class OpenRouterClientTests
 
         Assert.Equal(OpenRouterFailureKind.InvalidRequest, exception.Kind);
         Assert.Equal(HttpStatusCode.BadRequest, exception.UpstreamStatusCode);
-        Assert.Equal("Model not found", exception.Message);
+        Assert.Equal("O OpenRouter rejeitou o modelo ou a requisição informada.", exception.Message);
     }
 
     private static OpenRouterClient CreateClient(HttpMessageHandler handler)
@@ -74,7 +74,7 @@ public sealed class OpenRouterClientTests
 
         return new OpenRouterClient(
             httpClient,
-            Options.Create(new OpenRouterOptions { ApiKey = "test-key" }));
+            Options.Create(new OpenRouterOptions { ApiKey = "chave-de-teste" }));
     }
 
     internal static HttpResponseMessage JsonResponse(
