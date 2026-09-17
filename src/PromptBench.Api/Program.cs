@@ -25,6 +25,8 @@ builder.Services.AddSingleton(new EvaluationSetLoader(
     Path.Combine(AppContext.BaseDirectory, "evals")));
 builder.Services.AddSingleton(new RunStore(
     Path.Combine(AppContext.BaseDirectory, "runs")));
+builder.Services.AddSingleton(new ReportStore(
+    Path.Combine(AppContext.BaseDirectory, "reports")));
 builder.Services.Configure<OpenRouterOptions>(
     builder.Configuration.GetSection(OpenRouterOptions.SectionName));
 builder.Services.AddHttpClient<OpenRouterClient>(client =>
@@ -36,6 +38,7 @@ builder.Services.AddTransient<EvaluationRunner>();
 builder.Services.AddTransient<LlmJudgeEvaluator>();
 builder.Services.AddTransient<ComparisonRunner>();
 builder.Services.AddTransient<PersistedRunComparisonService>();
+builder.Services.AddSingleton<PersistedRunReportGenerator>();
 
 var app = builder.Build();
 
@@ -226,6 +229,83 @@ app.MapGet("/runs", async (RunStore runStore, CancellationToken cancellationToke
     .WithName("ListPersistedRuns")
     .WithDescription("Lista resumos das execuções e comparações persistidas, da mais recente para a mais antiga.")
     .Produces<IReadOnlyList<RunSummary>>()
+    .ProducesProblem(StatusCodes.Status500InternalServerError);
+
+app.MapGet("/runs/{baselineId:guid}/compare/{candidateId:guid}/report", async (
+        Guid baselineId,
+        Guid candidateId,
+        PersistedRunComparisonService comparisonService,
+        PersistedRunReportGenerator reportGenerator,
+        ReportStore reportStore,
+        CancellationToken cancellationToken) =>
+    {
+        var outcome = await comparisonService.CompareAsync(
+            baselineId,
+            candidateId,
+            cancellationToken);
+
+        if (outcome.Status is not PersistedRunComparisonStatus.Success)
+        {
+            return outcome.Status switch
+            {
+                PersistedRunComparisonStatus.BaselineNotFound => Results.Problem(
+                    title: "Execução de referência não encontrada",
+                    detail: "A execução informada como baseline não existe.",
+                    statusCode: StatusCodes.Status404NotFound),
+                PersistedRunComparisonStatus.CandidateNotFound => Results.Problem(
+                    title: "Execução candidata não encontrada",
+                    detail: "A execução informada como candidate não existe.",
+                    statusCode: StatusCodes.Status404NotFound),
+                PersistedRunComparisonStatus.DifferentEvaluation => Results.Problem(
+                    title: "Execuções incompatíveis",
+                    detail: "As execuções devem pertencer ao mesmo Evaluation Set.",
+                    statusCode: StatusCodes.Status400BadRequest),
+                PersistedRunComparisonStatus.InsufficientData => Results.Problem(
+                    title: "Dados insuficientes para comparação",
+                    detail: "As execuções devem conter resultados individuais com julgamentos concluídos para todos os casos.",
+                    statusCode: StatusCodes.Status422UnprocessableEntity),
+                _ => Results.Problem(
+                    title: "Falha ao consultar execuções",
+                    detail: "Um dos resultados armazenados está inválido ou não pôde ser lido.",
+                    statusCode: StatusCodes.Status500InternalServerError)
+            };
+        }
+
+        var markdown = reportGenerator.Generate(outcome.Result!);
+
+        try
+        {
+            var saveResult = await reportStore.SaveAsync(
+                baselineId,
+                candidateId,
+                markdown,
+                cancellationToken);
+
+            if (saveResult is ReportSaveStatus.AlreadyExists)
+            {
+                return Results.Problem(
+                    title: "Relatório já existente",
+                    detail: "Já existe um relatório salvo para essas execuções.",
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            return Results.Text(markdown, "text/markdown; charset=utf-8");
+        }
+        catch (ReportStorageException exception)
+        {
+            return Results.Problem(
+                title: "Falha ao salvar relatório",
+                detail: exception.Message,
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
+    })
+    .WithName("GeneratePersistedRunComparisonReport")
+    .WithDescription("Gera e salva um relatório Markdown factual da comparação entre duas execuções persistidas.")
+    .Produces(StatusCodes.Status200OK, contentType: "text/markdown")
+    .ProducesProblem(StatusCodes.Status400BadRequest)
+    .ProducesProblem(StatusCodes.Status404NotFound)
+    .ProducesProblem(StatusCodes.Status409Conflict)
+    .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
     .ProducesProblem(StatusCodes.Status500InternalServerError);
 
 app.MapGet("/runs/{baselineId:guid}/compare/{candidateId:guid}", async (

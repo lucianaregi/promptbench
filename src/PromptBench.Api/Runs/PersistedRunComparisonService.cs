@@ -108,6 +108,8 @@ public sealed class PersistedRunComparisonService
             baseline.Id,
             candidate.Id,
             baseline.Evaluation,
+            CreateRunInfo(baseline),
+            CreateRunInfo(candidate),
             new PersistedRunComparisonSummary(
                 cases.Count,
                 cases.Count(item => item.Status is "regression"),
@@ -131,6 +133,18 @@ public sealed class PersistedRunComparisonService
                     Difference(baselineTokens, candidateTokens))),
             cases);
     }
+
+    private static PersistedRunInfo CreateRunInfo(EvaluationRunResult run) =>
+        new(
+            run.Id,
+            run.StartedAt,
+            run.RequestedModel,
+            run.Results
+                .Select(result => result.UsedModel)
+                .Where(model => !string.IsNullOrWhiteSpace(model))
+                .Select(model => model!)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray());
 
     private static bool TryReadRun(JsonElement root, out EvaluationRunResult run)
     {

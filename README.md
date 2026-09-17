@@ -131,6 +131,7 @@ O `llm_judge` funciona tanto nas execuções individuais quanto nas comparaçõe
 - `GET /runs` — lista resumos das execuções persistidas, da mais recente para a mais antiga.
 - `GET /runs/{id}` — retorna uma execução ou comparação persistida; responde 404 quando o ID não existe.
 - `GET /runs/{baselineId}/compare/{candidateId}` — compara duas execuções individuais persistidas do mesmo Evaluation Set.
+- `GET /runs/{baselineId}/compare/{candidateId}/report` — gera e salva o relatório Markdown da comparação.
 
 ### Executar um Evaluation Set
 
@@ -297,6 +298,18 @@ Os casos são associados por `caseId`. O resultado usa `unchanged_pass` quando a
 O resumo informa as quantidades de cada classificação. As métricas apresentam valores de baseline, candidate e a diferença `candidate - baseline` para taxa de aprovação, duração e total de tokens, quando disponíveis. Esses valores não produzem ranking nem escolhem um modelo vencedor.
 
 As duas execuções precisam ser do tipo `evaluation_run`, pertencer ao mesmo Evaluation Set e possuir um resultado de avaliação concluído para cada caso. Comparações multi-modelo persistidas ou runs sem `passed` possuem dados insuficientes para esta operação.
+
+## Relatório Markdown da comparação
+
+O relatório factual da comparação pode ser gerado com:
+
+```http
+GET /runs/11111111-1111-1111-1111-111111111111/compare/22222222-2222-2222-2222-222222222222/report
+```
+
+A resposta usa `text/markdown` e inclui identificação e data das execuções, modelos, resumo, métricas, tabela de casos e uma seção de regressões. Duração e tokens são apresentados sem inferir que valores menores representam maior qualidade. Casos adicionados e removidos permanecem identificados separadamente.
+
+O mesmo conteúdo é salvo em `reports/<baseline-id>_vs_<candidate-id>.md`, dentro do diretório base da aplicação. O caminho não depende do current working directory. Se o arquivo já existir, a API retorna HTTP 409 e não o sobrescreve.
 
 ## Estrutura
 

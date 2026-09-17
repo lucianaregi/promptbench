@@ -115,6 +115,91 @@ public sealed class RunEndpointTests
     }
 
     [Fact]
+    public async Task GeneratesAndSavesMarkdownComparisonReport()
+    {
+        using var directory = new TemporaryDirectory();
+        var reportsDirectory = System.IO.Path.Combine(directory.Path, "reports");
+        var store = new RunStore(directory.Path);
+        var baseline = PersistedRunComparisonServiceTests.CreateRun(
+            Guid.NewGuid(),
+            "summarization-basic",
+            300,
+            20,
+            ("biblioteca-aos-domingos", true));
+        var candidate = PersistedRunComparisonServiceTests.CreateRun(
+            Guid.NewGuid(),
+            "summarization-basic",
+            350,
+            22,
+            ("biblioteca-aos-domingos", false));
+        await store.SaveAsync(baseline);
+        await store.SaveAsync(candidate);
+        await using var factory = new RunStoreApiFactory(directory.Path, reportsDirectory);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync(
+            $"/runs/{baseline.Id}/compare/{candidate.Id}/report");
+        var markdown = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/markdown", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("# Relatório de comparação de execuções", markdown);
+        Assert.Contains(baseline.Id.ToString(), markdown);
+        Assert.Contains(candidate.Id.ToString(), markdown);
+        Assert.Contains("provedor/modelo-real", markdown);
+        Assert.Contains("| biblioteca-aos-domingos | Passou | Falhou | Regressão |", markdown);
+        var reportPath = System.IO.Path.Combine(
+            reportsDirectory,
+            $"{baseline.Id:D}_vs_{candidate.Id:D}.md");
+        Assert.True(File.Exists(reportPath));
+        Assert.Equal(markdown, await File.ReadAllTextAsync(reportPath));
+
+        var duplicateResponse = await client.GetAsync(
+            $"/runs/{baseline.Id}/compare/{candidate.Id}/report");
+
+        Assert.Equal(HttpStatusCode.Conflict, duplicateResponse.StatusCode);
+        Assert.Equal(markdown, await File.ReadAllTextAsync(reportPath));
+    }
+
+    [Fact]
+    public async Task ReturnsNotFoundWhenReportBaselineDoesNotExist()
+    {
+        using var directory = new TemporaryDirectory();
+        await using var factory = new RunStoreApiFactory(directory.Path);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync(
+            $"/runs/{Guid.NewGuid()}/compare/{Guid.NewGuid()}/report");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("referência não encontrada", body);
+    }
+
+    [Fact]
+    public async Task ReturnsNotFoundWhenReportCandidateDoesNotExist()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new RunStore(directory.Path);
+        var baseline = PersistedRunComparisonServiceTests.CreateRun(
+            Guid.NewGuid(),
+            "summarization-basic",
+            300,
+            20,
+            ("biblioteca-aos-domingos", true));
+        await store.SaveAsync(baseline);
+        await using var factory = new RunStoreApiFactory(directory.Path);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync(
+            $"/runs/{baseline.Id}/compare/{Guid.NewGuid()}/report");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("candidata não encontrada", body);
+    }
+
+    [Fact]
     public async Task ReturnsControlledErrorForInvalidStoredJson()
     {
         using var directory = new TemporaryDirectory();
@@ -133,7 +218,9 @@ public sealed class RunEndpointTests
         Assert.DoesNotContain(directory.Path, body);
     }
 
-    private sealed class RunStoreApiFactory(string runsDirectory) : WebApplicationFactory<Program>
+    private sealed class RunStoreApiFactory(
+        string runsDirectory,
+        string? reportsDirectory = null) : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -141,6 +228,9 @@ public sealed class RunEndpointTests
             {
                 services.RemoveAll<RunStore>();
                 services.AddSingleton(new RunStore(runsDirectory));
+                services.RemoveAll<ReportStore>();
+                services.AddSingleton(new ReportStore(
+                    reportsDirectory ?? System.IO.Path.Combine(runsDirectory, "reports")));
             });
         }
     }

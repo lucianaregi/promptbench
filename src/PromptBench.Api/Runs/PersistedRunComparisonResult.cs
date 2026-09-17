@@ -4,9 +4,17 @@ public sealed record PersistedRunComparisonResult(
     Guid BaselineId,
     Guid CandidateId,
     string Evaluation,
+    PersistedRunInfo Baseline,
+    PersistedRunInfo Candidate,
     PersistedRunComparisonSummary Summary,
     PersistedRunComparisonMetrics Metrics,
     IReadOnlyList<PersistedRunCaseComparison> Cases);
+
+public sealed record PersistedRunInfo(
+    Guid Id,
+    DateTimeOffset StartedAt,
+    string RequestedModel,
+    IReadOnlyList<string> UsedModels);
 
 public sealed record PersistedRunComparisonSummary(
     int Total,
