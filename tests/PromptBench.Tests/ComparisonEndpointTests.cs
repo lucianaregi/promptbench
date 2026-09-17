@@ -46,12 +46,24 @@ public sealed class ComparisonEndpointTests
     public async Task RunsModelsSequentiallyWithTheSameCasesAndAggregatesTokens()
     {
         var requests = new List<(string Model, string Prompt)>();
+        var judgeRequests = 0;
         var handler = new StubHttpMessageHandler(async (request, _) =>
         {
             using var payload = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
             var model = payload.RootElement.GetProperty("model").GetString()!;
             var message = Assert.Single(payload.RootElement.GetProperty("messages").EnumerateArray());
             var prompt = message.GetProperty("content").GetString()!;
+            if (payload.RootElement.TryGetProperty("response_format", out var responseFormat))
+            {
+                judgeRequests++;
+                return JsonResponse(
+                    "{\"passed\":true,\"reason\":\"O resumo preserva as informações principais.\"}",
+                    model,
+                    8,
+                    4,
+                    12);
+            }
+
             requests.Add((model, prompt));
 
             var output = model.EndsWith("modelo-a", StringComparison.Ordinal)
@@ -98,6 +110,7 @@ public sealed class ComparisonEndpointTests
         Assert.Equal(requests[1].Prompt, requests[3].Prompt);
         Assert.Contains("biblioteca", requests[0].Prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("chuva", requests[1].Prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(4, judgeRequests);
     }
 
     [Fact]

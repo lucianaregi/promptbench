@@ -12,12 +12,14 @@ namespace PromptBench.Tests;
 internal sealed class OpenRouterApiFactory : WebApplicationFactory<Program>
 {
     private readonly HttpMessageHandler _handler;
+    private readonly string? _apiKey;
     private readonly string _runsDirectory =
         Directory.CreateTempSubdirectory("promptbench-runs-tests-").FullName;
 
-    public OpenRouterApiFactory(HttpMessageHandler handler)
+    public OpenRouterApiFactory(HttpMessageHandler handler, string? apiKey = "chave-de-teste")
     {
         _handler = handler;
+        _apiKey = apiKey;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -26,7 +28,7 @@ internal sealed class OpenRouterApiFactory : WebApplicationFactory<Program>
         {
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["OpenRouter:ApiKey"] = "chave-de-teste"
+                ["OpenRouter:ApiKey"] = _apiKey
             });
         });
 

@@ -62,6 +62,59 @@ public sealed class RunEndpointTests
     }
 
     [Fact]
+    public async Task ComparesTwoPersistedRuns()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new RunStore(directory.Path);
+        var baseline = PersistedRunComparisonServiceTests.CreateRun(
+            Guid.NewGuid(),
+            "summarization-basic",
+            300,
+            20,
+            ("biblioteca-aos-domingos", true));
+        var candidate = PersistedRunComparisonServiceTests.CreateRun(
+            Guid.NewGuid(),
+            "summarization-basic",
+            350,
+            22,
+            ("biblioteca-aos-domingos", false));
+        await store.SaveAsync(baseline);
+        await store.SaveAsync(candidate);
+        await using var factory = new RunStoreApiFactory(directory.Path);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/runs/{baseline.Id}/compare/{candidate.Id}");
+        var comparison = await response.Content.ReadFromJsonAsync<PersistedRunComparisonResult>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(comparison);
+        Assert.Equal(1, comparison.Summary.Regressions);
+        Assert.Equal("regression", Assert.Single(comparison.Cases).Status);
+    }
+
+    [Fact]
+    public async Task ReturnsNotFoundWhenComparisonBaselineDoesNotExist()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new RunStore(directory.Path);
+        var candidate = PersistedRunComparisonServiceTests.CreateRun(
+            Guid.NewGuid(),
+            "summarization-basic",
+            350,
+            22,
+            ("biblioteca-aos-domingos", true));
+        await store.SaveAsync(candidate);
+        await using var factory = new RunStoreApiFactory(directory.Path);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/runs/{Guid.NewGuid()}/compare/{candidate.Id}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("referência não encontrada", body);
+    }
+
+    [Fact]
     public async Task ReturnsControlledErrorForInvalidStoredJson()
     {
         using var directory = new TemporaryDirectory();

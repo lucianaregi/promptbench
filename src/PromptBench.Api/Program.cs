@@ -1,9 +1,24 @@
 using PromptBench.Api.Comparisons;
 using PromptBench.Api.Evals;
 using PromptBench.Api.OpenRouter;
+using Microsoft.Extensions.FileProviders;
 using PromptBench.Api.Runs;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Configuration.AddJsonFile(
+    new PhysicalFileProvider(AppContext.BaseDirectory),
+    "appsettings.Local.json",
+    optional: true,
+    reloadOnChange: true);
+
+if (builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddUserSecrets<Program>(optional: true);
+}
+
+builder.Configuration.AddEnvironmentVariables();
+builder.Configuration.AddCommandLine(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddSingleton(new EvaluationSetLoader(
@@ -20,6 +35,7 @@ builder.Services.AddHttpClient<OpenRouterClient>(client =>
 builder.Services.AddTransient<EvaluationRunner>();
 builder.Services.AddTransient<LlmJudgeEvaluator>();
 builder.Services.AddTransient<ComparisonRunner>();
+builder.Services.AddTransient<PersistedRunComparisonService>();
 
 var app = builder.Build();
 
@@ -211,6 +227,51 @@ app.MapGet("/runs", async (RunStore runStore, CancellationToken cancellationToke
     .WithDescription("Lista resumos das execuções e comparações persistidas, da mais recente para a mais antiga.")
     .Produces<IReadOnlyList<RunSummary>>()
     .ProducesProblem(StatusCodes.Status500InternalServerError);
+
+app.MapGet("/runs/{baselineId:guid}/compare/{candidateId:guid}", async (
+        Guid baselineId,
+        Guid candidateId,
+        PersistedRunComparisonService comparisonService,
+        CancellationToken cancellationToken) =>
+    {
+        var outcome = await comparisonService.CompareAsync(
+            baselineId,
+            candidateId,
+            cancellationToken);
+
+        return outcome.Status switch
+        {
+            PersistedRunComparisonStatus.Success => Results.Ok(outcome.Result),
+            PersistedRunComparisonStatus.BaselineNotFound => Results.Problem(
+                title: "Execução de referência não encontrada",
+                detail: "A execução informada como baseline não existe.",
+                statusCode: StatusCodes.Status404NotFound),
+            PersistedRunComparisonStatus.CandidateNotFound => Results.Problem(
+                title: "Execução candidata não encontrada",
+                detail: "A execução informada como candidate não existe.",
+                statusCode: StatusCodes.Status404NotFound),
+            PersistedRunComparisonStatus.DifferentEvaluation => Results.Problem(
+                title: "Execuções incompatíveis",
+                detail: "As execuções devem pertencer ao mesmo Evaluation Set.",
+                statusCode: StatusCodes.Status400BadRequest),
+            PersistedRunComparisonStatus.InsufficientData => Results.Problem(
+                title: "Dados insuficientes para comparação",
+                detail: "As execuções devem conter resultados individuais com julgamentos concluídos para todos os casos.",
+                statusCode: StatusCodes.Status422UnprocessableEntity),
+            _ => Results.Problem(
+                title: "Falha ao consultar execuções",
+                detail: "Um dos resultados armazenados está inválido ou não pôde ser lido.",
+                statusCode: StatusCodes.Status500InternalServerError)
+        };
+    })
+    .WithName("ComparePersistedRuns")
+    .WithDescription("Compara duas execuções individuais persistidas do mesmo Evaluation Set pelo resultado de cada caso.")
+    .Produces<PersistedRunComparisonResult>()
+    .ProducesProblem(StatusCodes.Status400BadRequest)
+    .ProducesProblem(StatusCodes.Status404NotFound)
+    .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+    .ProducesProblem(StatusCodes.Status500InternalServerError);
+
 app.MapGet("/runs/{id:guid}", async (
         Guid id,
         RunStore runStore,

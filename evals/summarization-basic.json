@@ -1,6 +1,11 @@
 {
   "name": "summarization-basic",
   "description": "Casos básicos de avaliação para resumo de textos.",
+  "evaluation": {
+    "type": "llm_judge",
+    "judgeModel": "qwen/qwen3.8-27b:free",
+    "criteria": "O resumo deve preservar as informações principais do texto original sem acrescentar informações inexistentes."
+  },
   "cases": [
     {
       "id": "biblioteca-aos-domingos",

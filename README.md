@@ -25,13 +25,23 @@ dotnet build
 dotnet run --project src/PromptBench.Api
 ```
 
-Configure a chave durante o desenvolvimento com User Secrets:
+Configure a chave durante o desenvolvimento em `src/PromptBench.Api/appsettings.Local.json`. O arquivo é opcional, não é versionado e pode ser criado a partir de `appsettings.Local.example.json`:
+
+```json
+{
+  "OpenRouter": {
+    "ApiKey": "COLOQUE_A_CHAVE_AQUI"
+  }
+}
+```
+
+User Secrets e a variável de ambiente `OpenRouter__ApiKey` continuam disponíveis e têm precedência sobre o arquivo local:
 
 ```bash
 dotnet user-secrets set "OpenRouter:ApiKey" "SUA_CHAVE" --project src/PromptBench.Api
 ```
 
-Também é possível usar a variável de ambiente `OpenRouter__ApiKey`. Nunca armazene uma chave real nos arquivos versionados do projeto.
+Nunca armazene uma chave real nos arquivos versionados do projeto.
 
 Com o perfil HTTP de desenvolvimento, o Swagger fica disponível em `http://localhost:5146/swagger`.
 
@@ -120,6 +130,7 @@ O `llm_judge` funciona tanto nas execuções individuais quanto nas comparaçõe
 - `POST /evals/{name}/comparisons` — coloca lado a lado as execuções do mesmo eval em pelo menos dois modelos distintos.
 - `GET /runs` — lista resumos das execuções persistidas, da mais recente para a mais antiga.
 - `GET /runs/{id}` — retorna uma execução ou comparação persistida; responde 404 quando o ID não existe.
+- `GET /runs/{baselineId}/compare/{candidateId}` — compara duas execuções individuais persistidas do mesmo Evaluation Set.
 
 ### Executar um Evaluation Set
 
@@ -163,6 +174,24 @@ Resposta resumida:
 O campo `usedModel` registra o modelo efetivamente informado pelo OpenRouter quando disponível. Os dados de `usage` são opcionais e não são calculados localmente.
 
 A disponibilidade, os identificadores e os limites dos modelos são definidos pelo OpenRouter. Consulte o [catálogo atual de modelos](https://openrouter.ai/models) antes de executar um eval.
+
+### Smoke test com OpenRouter
+
+Depois de inserir a chave no arquivo local, inicie a API:
+
+```bash
+dotnet run --project src/PromptBench.Api
+```
+
+Em outro terminal, execute o Evaluation Set existente com um modelo gratuito informado explicitamente:
+
+```bash
+curl -X POST http://localhost:5146/evals/summarization-basic/runs \
+  -H "Content-Type: application/json" \
+  -d '{"model":"qwen/qwen3-4b:free"}'
+```
+
+A disponibilidade de modelos gratuitos pode mudar; confirme o identificador no catálogo do OpenRouter antes do teste.
 
 ## Comparar modelos
 
@@ -254,6 +283,20 @@ GET /runs/17fcf7ea-a4a4-49ca-8c46-e02b0325d394
 O endpoint devolve o mesmo JSON produzido originalmente. Um ID inexistente retorna HTTP 404. Arquivos inválidos ou falhas de leitura retornam um erro controlado, sem expor caminhos internos ou stack traces.
 
 Não há listagem, filtros, paginação nem limpeza automática dos arquivos nesta versão.
+
+## Comparar execuções persistidas
+
+Duas execuções individuais do mesmo Evaluation Set podem ser comparadas usando a primeira como referência:
+
+```http
+GET /runs/11111111-1111-1111-1111-111111111111/compare/22222222-2222-2222-2222-222222222222
+```
+
+Os casos são associados por `caseId`. O resultado usa `unchanged_pass` quando ambos passaram, `unchanged_fail` quando ambos falharam, `regression` quando apenas o baseline passou e `improvement` quando apenas o candidate passou. Casos exclusivos do candidate são marcados como `added`; casos exclusivos do baseline, como `removed`. Eles não são contados falsamente como regressão ou melhoria.
+
+O resumo informa as quantidades de cada classificação. As métricas apresentam valores de baseline, candidate e a diferença `candidate - baseline` para taxa de aprovação, duração e total de tokens, quando disponíveis. Esses valores não produzem ranking nem escolhem um modelo vencedor.
+
+As duas execuções precisam ser do tipo `evaluation_run`, pertencer ao mesmo Evaluation Set e possuir um resultado de avaliação concluído para cada caso. Comparações multi-modelo persistidas ou runs sem `passed` possuem dados insuficientes para esta operação.
 
 ## Estrutura
 

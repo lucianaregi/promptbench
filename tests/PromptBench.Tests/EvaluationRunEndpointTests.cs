@@ -30,6 +30,24 @@ public sealed class EvaluationRunEndpointTests
         {
             using var payload = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
             var message = Assert.Single(payload.RootElement.GetProperty("messages").EnumerateArray());
+            if (payload.RootElement.TryGetProperty("response_format", out var responseFormat))
+            {
+                return OpenRouterClientTests.JsonResponse(
+                    """
+                    {
+                      "choices": [
+                        {
+                          "message": {
+                            "content": "{\"passed\":true,\"reason\":\"O resumo preserva as informações principais.\"}",
+                            "role": "assistant"
+                          }
+                        }
+                      ],
+                      "model": "qwen/qwen3.8-27b:free"
+                    }
+                    """);
+            }
+
             prompts.Add(message.GetProperty("content").GetString()!);
             return OpenRouterClientTests.JsonResponse(OpenRouterClientTests.SuccessResponse);
         });
@@ -51,6 +69,8 @@ public sealed class EvaluationRunEndpointTests
             Assert.Equal("Resumo produzido.", item.Output);
             Assert.Equal("provider/actual-model", item.UsedModel);
             Assert.Equal(19, item.Usage?.TotalTokens);
+            Assert.Equal("completed", item.Evaluation?.Status);
+            Assert.True(item.Evaluation?.Passed);
         });
         Assert.Equal(2, prompts.Count);
         Assert.Contains("biblioteca", prompts[0], StringComparison.OrdinalIgnoreCase);
@@ -104,7 +124,9 @@ public sealed class EvaluationRunEndpointTests
     [Fact]
     public async Task ReturnsServiceUnavailableWhenApiKeyIsMissing()
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        var handler = new StubHttpMessageHandler((_, _) =>
+            throw new InvalidOperationException("O OpenRouter não deve ser chamado sem chave."));
+        await using var factory = new OpenRouterApiFactory(handler, apiKey: "");
         using var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync(
