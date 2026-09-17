@@ -39,6 +39,7 @@ builder.Services.AddTransient<LlmJudgeEvaluator>();
 builder.Services.AddTransient<ComparisonRunner>();
 builder.Services.AddTransient<PersistedRunComparisonService>();
 builder.Services.AddSingleton<PersistedRunReportGenerator>();
+builder.Services.AddSingleton<RegressionGateService>();
 
 var app = builder.Build();
 
@@ -305,6 +306,60 @@ app.MapGet("/runs/{baselineId:guid}/compare/{candidateId:guid}/report", async (
     .ProducesProblem(StatusCodes.Status400BadRequest)
     .ProducesProblem(StatusCodes.Status404NotFound)
     .ProducesProblem(StatusCodes.Status409Conflict)
+    .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
+    .ProducesProblem(StatusCodes.Status500InternalServerError);
+
+app.MapGet("/runs/{baselineId:guid}/compare/{candidateId:guid}/gate", async (
+        Guid baselineId,
+        Guid candidateId,
+        PersistedRunComparisonService comparisonService,
+        RegressionGateService gateService,
+        CancellationToken cancellationToken) =>
+    {
+        var outcome = await comparisonService.CompareAsync(
+            baselineId,
+            candidateId,
+            cancellationToken);
+
+        if (outcome.Status is not PersistedRunComparisonStatus.Success)
+        {
+            return outcome.Status switch
+            {
+                PersistedRunComparisonStatus.BaselineNotFound => Results.Problem(
+                    title: "Execução de referência não encontrada",
+                    detail: "A execução informada como baseline não existe.",
+                    statusCode: StatusCodes.Status404NotFound),
+                PersistedRunComparisonStatus.CandidateNotFound => Results.Problem(
+                    title: "Execução candidata não encontrada",
+                    detail: "A execução informada como candidate não existe.",
+                    statusCode: StatusCodes.Status404NotFound),
+                PersistedRunComparisonStatus.DifferentEvaluation => Results.Problem(
+                    title: "Execuções incompatíveis",
+                    detail: "As execuções devem pertencer ao mesmo Evaluation Set.",
+                    statusCode: StatusCodes.Status400BadRequest),
+                PersistedRunComparisonStatus.InsufficientData => Results.Problem(
+                    title: "Dados insuficientes para comparação",
+                    detail: "As execuções devem conter resultados individuais com julgamentos concluídos para todos os casos.",
+                    statusCode: StatusCodes.Status422UnprocessableEntity),
+                _ => Results.Problem(
+                    title: "Falha ao consultar execuções",
+                    detail: "Um dos resultados armazenados está inválido ou não pôde ser lido.",
+                    statusCode: StatusCodes.Status500InternalServerError)
+            };
+        }
+
+        var gate = gateService.Evaluate(outcome.Result!);
+
+        return gate.Passed
+            ? Results.Ok(gate)
+            : Results.Json(gate, statusCode: StatusCodes.Status409Conflict);
+    })
+    .WithName("EvaluatePersistedRunRegressionGate")
+    .WithDescription("Verifica se a execução candidata introduziu regressões em relação ao baseline.")
+    .Produces<RegressionGateResult>()
+    .Produces<RegressionGateResult>(StatusCodes.Status409Conflict)
+    .ProducesProblem(StatusCodes.Status400BadRequest)
+    .ProducesProblem(StatusCodes.Status404NotFound)
     .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
     .ProducesProblem(StatusCodes.Status500InternalServerError);
 

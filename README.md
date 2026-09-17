@@ -131,6 +131,7 @@ O `llm_judge` funciona tanto nas execuções individuais quanto nas comparaçõe
 - `GET /runs` — lista resumos das execuções persistidas, da mais recente para a mais antiga.
 - `GET /runs/{id}` — retorna uma execução ou comparação persistida; responde 404 quando o ID não existe.
 - `GET /runs/{baselineId}/compare/{candidateId}` — compara duas execuções individuais persistidas do mesmo Evaluation Set.
+- `GET /runs/{baselineId}/compare/{candidateId}/gate` — verifica se o candidate introduziu regressões.
 - `GET /runs/{baselineId}/compare/{candidateId}/report` — gera e salva o relatório Markdown da comparação.
 
 ### Executar um Evaluation Set
@@ -298,6 +299,38 @@ Os casos são associados por `caseId`. O resultado usa `unchanged_pass` quando a
 O resumo informa as quantidades de cada classificação. As métricas apresentam valores de baseline, candidate e a diferença `candidate - baseline` para taxa de aprovação, duração e total de tokens, quando disponíveis. Esses valores não produzem ranking nem escolhem um modelo vencedor.
 
 As duas execuções precisam ser do tipo `evaluation_run`, pertencer ao mesmo Evaluation Set e possuir um resultado de avaliação concluído para cada caso. Comparações multi-modelo persistidas ou runs sem `passed` possuem dados insuficientes para esta operação.
+
+## Gate de regressão
+
+O gate permite que automações verifiquem regressões sem interpretar o resultado completo da comparação:
+
+```http
+GET /runs/11111111-1111-1111-1111-111111111111/compare/22222222-2222-2222-2222-222222222222/gate
+```
+
+Sem regressões, o endpoint retorna HTTP 200:
+
+```json
+{
+  "passed": true,
+  "regressions": 0
+}
+```
+
+Quando existem regressões, retorna HTTP 409 Conflict e informa os casos afetados:
+
+```json
+{
+  "passed": false,
+  "regressions": 2,
+  "regressionCaseIds": [
+    "biblioteca-aos-domingos",
+    "previsao-do-tempo"
+  ]
+}
+```
+
+Somente casos já classificados como `regression` pela comparação histórica fazem o gate falhar. Melhorias, casos sem alteração e casos adicionados ou removidos não provocam falha. `passRate`, duração e tokens não participam da decisão.
 
 ## Relatório Markdown da comparação
 
