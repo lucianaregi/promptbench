@@ -32,6 +32,21 @@ public sealed class RunStoreTests
     }
 
     [Fact]
+    public async Task DoesNotLeavePartialFileWhenSaveIsCanceled()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new RunStore(directory.Path);
+        var result = CreateResult(Guid.NewGuid());
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            store.SaveAsync(result, cancellation.Token));
+
+        Assert.Empty(Directory.EnumerateFiles(directory.Path));
+    }
+
+    [Fact]
     public async Task ListsEmptyDirectory()
     {
         using var directory = new TemporaryDirectory();

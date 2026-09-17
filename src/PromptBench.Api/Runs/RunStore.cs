@@ -19,25 +19,61 @@ public sealed class RunStore
     public async Task SaveAsync<T>(T result, CancellationToken cancellationToken = default)
         where T : IPersistedRunResult
     {
+        string? temporaryPath = null;
+
         try
         {
             Directory.CreateDirectory(_runsDirectory);
             var path = GetPath(result.Id);
+            temporaryPath = Path.Combine(
+                _runsDirectory,
+                $".{result.Id:D}.{Guid.NewGuid():N}.tmp");
 
-            await using var stream = new FileStream(
-                path,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 4096,
-                useAsync: true);
-            await JsonSerializer.SerializeAsync(stream, result, JsonOptions, cancellationToken);
+            await using (var stream = new FileStream(
+                             temporaryPath,
+                             FileMode.CreateNew,
+                             FileAccess.Write,
+                             FileShare.None,
+                             bufferSize: 4096,
+                             useAsync: true))
+            {
+                await JsonSerializer.SerializeAsync(
+                    stream,
+                    result,
+                    JsonOptions,
+                    cancellationToken);
+                await stream.FlushAsync(cancellationToken);
+            }
+
+            File.Move(temporaryPath, path);
+            temporaryPath = null;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             throw new RunStorageException(
                 "Não foi possível persistir o resultado da execução.",
                 exception);
+        }
+        finally
+        {
+            DeleteTemporaryFile(temporaryPath);
+        }
+    }
+
+    private static void DeleteTemporaryFile(string? path)
+    {
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A falha principal não deve ser ocultada por uma falha de limpeza.
         }
     }
 
