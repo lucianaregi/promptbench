@@ -1,0 +1,83 @@
+name: Publicar run persistido
+
+on:
+  workflow_dispatch:
+    inputs:
+      runFile:
+        description: Caminho do arquivo JSON do run no repositório ou runner
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish-run:
+    name: Validar e publicar run
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fazer checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restaurar dependências
+        run: dotnet restore PromptBench.slnx
+
+      - name: Compilar solução
+        run: dotnet build PromptBench.slnx --configuration Release --no-restore
+
+      - name: Validar run persistido
+        id: run
+        shell: bash
+        env:
+          RUN_FILE: ${{ inputs.runFile }}
+        run: |
+          set -uo pipefail
+
+          if [[ ! -f "$RUN_FILE" ]]; then
+            echo "O arquivo informado não existe: $RUN_FILE"
+            exit 2
+          fi
+
+          validation_json="$(dotnet run --project src/PromptBench.Cli \
+            --configuration Release --no-build --no-restore -- regression-gate \
+            --baseline-file "$RUN_FILE" \
+            --candidate-file "$RUN_FILE")"
+          validation_exit=$?
+
+          if (( validation_exit != 0 )); then
+            echo "O arquivo informado não contém um run válido para comparação."
+            exit 2
+          fi
+
+          if ! run_id="$(jq -er '.baselineId | strings' <<< "$validation_json")"; then
+            echo "Não foi possível extrair o ID do run validado."
+            exit 2
+          fi
+
+          artifact_name="promptbench-run-$run_id"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
+          echo "Run validado. ID: $run_id"
+          echo "Nome reservado para o artifact: $artifact_name"
+
+      - name: Publicar artifact do run
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.run.outputs.artifact_name }}
+          path: ${{ inputs.runFile }}
+          if-no-files-found: error
+
+      - name: Confirmar publicação
+        shell: bash
+        env:
+          RUN_ID: ${{ steps.run.outputs.run_id }}
+          ARTIFACT_NAME: ${{ steps.run.outputs.artifact_name }}
+        run: |
+          echo "Run publicado. ID: $RUN_ID"
+          echo "Artifact criado: $ARTIFACT_NAME"
