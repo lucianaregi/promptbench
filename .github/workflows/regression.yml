@@ -3,20 +3,20 @@ name: Regression gate
 on:
   workflow_dispatch:
     inputs:
-      baselineRunId:
+      baselineWorkflowRunId:
         description: ID da execução do GitHub Actions que publicou o artifact do baseline
         required: true
         type: string
-      baselineArtifact:
-        description: Nome do artifact que contém o run de baseline
+      baselineRunId:
+        description: ID do run de baseline do PromptBench
         required: true
         type: string
-      candidateRunId:
+      candidateWorkflowRunId:
         description: ID da execução do GitHub Actions que publicou o artifact do candidate
         required: true
         type: string
-      candidateArtifact:
-        description: Nome do artifact que contém o run de candidate
+      candidateRunId:
+        description: ID do run de candidate do PromptBench
         required: true
         type: string
 
@@ -50,18 +50,18 @@ jobs:
       - name: Baixar run de baseline
         uses: actions/download-artifact@v5
         with:
-          name: ${{ inputs.baselineArtifact }}
+          name: promptbench-run-${{ inputs.baselineRunId }}
           path: .artifacts/baseline
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.baselineRunId }}
+          run-id: ${{ inputs.baselineWorkflowRunId }}
 
       - name: Baixar run de candidate
         uses: actions/download-artifact@v5
         with:
-          name: ${{ inputs.candidateArtifact }}
+          name: promptbench-run-${{ inputs.candidateRunId }}
           path: .artifacts/candidate
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.candidateRunId }}
+          run-id: ${{ inputs.candidateWorkflowRunId }}
 
       - name: Localizar arquivos dos runs
         shell: bash
@@ -86,11 +86,14 @@ jobs:
 
       - name: Executar regression gate
         shell: bash
+        env:
+          EXPECTED_BASELINE_ID: ${{ inputs.baselineRunId }}
+          EXPECTED_CANDIDATE_ID: ${{ inputs.candidateRunId }}
         run: |
           set -uo pipefail
 
           gate_json="$(dotnet run --project src/PromptBench.Cli \
-            --configuration Release --no-build -- regression-gate \
+            --configuration Release --no-build --no-restore -- regression-gate \
             --baseline-file .artifacts/baseline.json \
             --candidate-file .artifacts/candidate.json)"
           gate_exit=$?
@@ -107,6 +110,17 @@ jobs:
 
           if ! jq -e . >/dev/null 2>&1 <<< "$gate_json"; then
             echo "O regression gate não retornou um JSON válido."
+            exit 2
+          fi
+
+          returned_baseline_id="$(jq -r '.baselineId' <<< "$gate_json")"
+          returned_candidate_id="$(jq -r '.candidateId' <<< "$gate_json")"
+          if [[ "$returned_baseline_id" != "$EXPECTED_BASELINE_ID" ]]; then
+            echo "O artifact do baseline contém um run diferente do ID informado."
+            exit 2
+          fi
+          if [[ "$returned_candidate_id" != "$EXPECTED_CANDIDATE_ID" ]]; then
+            echo "O artifact do candidate contém um run diferente do ID informado."
             exit 2
           fi
 
