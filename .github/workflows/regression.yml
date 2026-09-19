@@ -1,0 +1,110 @@
+name: Regression gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseUrl:
+        description: URL base da instância do PromptBench que contém as execuções
+        required: true
+        type: string
+      baselineId:
+        description: ID da execução de referência
+        required: true
+        type: string
+      candidateId:
+        description: ID da execução candidata
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  regression-gate:
+    name: Validar regressões
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fazer checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restaurar dependências
+        run: dotnet restore PromptBench.slnx
+
+      - name: Compilar solução
+        run: dotnet build PromptBench.slnx --configuration Release --no-restore
+
+      - name: Executar testes
+        run: dotnet test PromptBench.slnx --configuration Release --no-build --no-restore
+
+      - name: Executar regression gate
+        shell: bash
+        env:
+          PROMPTBENCH_BASE_URL: ${{ inputs.baseUrl }}
+          BASELINE_ID: ${{ inputs.baselineId }}
+          CANDIDATE_ID: ${{ inputs.candidateId }}
+        run: |
+          set -euo pipefail
+
+          guid_pattern='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+
+          if [[ ! "$BASELINE_ID" =~ $guid_pattern ]]; then
+            echo "O baselineId informado não é um GUID válido."
+            exit 1
+          fi
+
+          if [[ ! "$CANDIDATE_ID" =~ $guid_pattern ]]; then
+            echo "O candidateId informado não é um GUID válido."
+            exit 1
+          fi
+
+          if [[ ! "$PROMPTBENCH_BASE_URL" =~ ^https?:// ]]; then
+            echo "A URL base deve usar HTTP ou HTTPS."
+            exit 1
+          fi
+
+          echo "Baseline utilizado: $BASELINE_ID"
+          echo "Candidate utilizado: $CANDIDATE_ID"
+
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          gate_url="${PROMPTBENCH_BASE_URL%/}/runs/$BASELINE_ID/compare/$CANDIDATE_ID/gate"
+
+          if ! http_status="$(curl --silent --show-error --output "$response_file" --write-out '%{http_code}' "$gate_url")"; then
+            echo "Não foi possível consultar o regression gate."
+            exit 1
+          fi
+
+          if [[ "$http_status" != "200" && "$http_status" != "409" ]]; then
+            message="$(jq -r '.detail // .title // empty' "$response_file" 2>/dev/null || true)"
+            echo "O regression gate retornou HTTP $http_status."
+            if [[ -n "$message" ]]; then
+              echo "Detalhe: $message"
+            fi
+            exit 1
+          fi
+
+          if ! regressions="$(jq -er '.regressions | numbers' "$response_file")"; then
+            echo "A resposta do regression gate é inválida."
+            exit 1
+          fi
+
+          echo "Quantidade de regressões: $regressions"
+
+          mapfile -t regression_cases < <(jq -r '.regressionCaseIds[]?' "$response_file")
+          if (( ${#regression_cases[@]} > 0 )); then
+            echo "Casos com regressão:"
+            printf '  - %s\n' "${regression_cases[@]}"
+          fi
+
+          if [[ "$http_status" == "409" ]]; then
+            echo "Resultado final: gate reprovado."
+            exit 1
+          fi
+
+          echo "Resultado final: gate aprovado."
