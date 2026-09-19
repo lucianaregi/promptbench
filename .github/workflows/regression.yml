@@ -3,20 +3,25 @@ name: Regression gate
 on:
   workflow_dispatch:
     inputs:
-      baseUrl:
-        description: URL base da instância do PromptBench que contém as execuções
+      baselineRunId:
+        description: ID da execução do GitHub Actions que publicou o artifact do baseline
         required: true
         type: string
-      baselineId:
-        description: ID da execução de referência
+      baselineArtifact:
+        description: Nome do artifact que contém o run de baseline
         required: true
         type: string
-      candidateId:
-        description: ID da execução candidata
+      candidateRunId:
+        description: ID da execução do GitHub Actions que publicou o artifact do candidate
+        required: true
+        type: string
+      candidateArtifact:
+        description: Nome do artifact que contém o run de candidate
         required: true
         type: string
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -42,69 +47,85 @@ jobs:
       - name: Executar testes
         run: dotnet test PromptBench.slnx --configuration Release --no-build --no-restore
 
-      - name: Executar regression gate
+      - name: Baixar run de baseline
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ inputs.baselineArtifact }}
+          path: .artifacts/baseline
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.baselineRunId }}
+
+      - name: Baixar run de candidate
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ inputs.candidateArtifact }}
+          path: .artifacts/candidate
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.candidateRunId }}
+
+      - name: Localizar arquivos dos runs
         shell: bash
-        env:
-          PROMPTBENCH_BASE_URL: ${{ inputs.baseUrl }}
-          BASELINE_ID: ${{ inputs.baselineId }}
-          CANDIDATE_ID: ${{ inputs.candidateId }}
         run: |
           set -euo pipefail
 
-          guid_pattern='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+          mapfile -d '' baseline_files < <(find .artifacts/baseline -type f -name '*.json' -print0)
+          mapfile -d '' candidate_files < <(find .artifacts/candidate -type f -name '*.json' -print0)
 
-          if [[ ! "$BASELINE_ID" =~ $guid_pattern ]]; then
-            echo "O baselineId informado não é um GUID válido."
-            exit 1
+          if (( ${#baseline_files[@]} != 1 )); then
+            echo "O artifact do baseline deve conter exatamente um arquivo JSON."
+            exit 2
           fi
 
-          if [[ ! "$CANDIDATE_ID" =~ $guid_pattern ]]; then
-            echo "O candidateId informado não é um GUID válido."
-            exit 1
+          if (( ${#candidate_files[@]} != 1 )); then
+            echo "O artifact do candidate deve conter exatamente um arquivo JSON."
+            exit 2
           fi
 
-          if [[ ! "$PROMPTBENCH_BASE_URL" =~ ^https?:// ]]; then
-            echo "A URL base deve usar HTTP ou HTTPS."
-            exit 1
+          cp -- "${baseline_files[0]}" .artifacts/baseline.json
+          cp -- "${candidate_files[0]}" .artifacts/candidate.json
+
+      - name: Executar regression gate
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          gate_json="$(dotnet run --project src/PromptBench.Cli \
+            --configuration Release --no-build -- regression-gate \
+            --baseline-file .artifacts/baseline.json \
+            --candidate-file .artifacts/candidate.json)"
+          gate_exit=$?
+
+          if (( gate_exit == 2 )); then
+            echo "Resultado final: não foi possível executar o regression gate."
+            exit 2
           fi
 
-          echo "Baseline utilizado: $BASELINE_ID"
-          echo "Candidate utilizado: $CANDIDATE_ID"
-
-          response_file="$(mktemp)"
-          trap 'rm -f "$response_file"' EXIT
-          gate_url="${PROMPTBENCH_BASE_URL%/}/runs/$BASELINE_ID/compare/$CANDIDATE_ID/gate"
-
-          if ! http_status="$(curl --silent --show-error --output "$response_file" --write-out '%{http_code}' "$gate_url")"; then
-            echo "Não foi possível consultar o regression gate."
-            exit 1
+          if (( gate_exit != 0 && gate_exit != 1 )); then
+            echo "O regression gate retornou um exit code inesperado: $gate_exit."
+            exit "$gate_exit"
           fi
 
-          if [[ "$http_status" != "200" && "$http_status" != "409" ]]; then
-            message="$(jq -r '.detail // .title // empty' "$response_file" 2>/dev/null || true)"
-            echo "O regression gate retornou HTTP $http_status."
-            if [[ -n "$message" ]]; then
-              echo "Detalhe: $message"
-            fi
-            exit 1
+          if ! jq -e . >/dev/null 2>&1 <<< "$gate_json"; then
+            echo "O regression gate não retornou um JSON válido."
+            exit 2
           fi
 
-          if ! regressions="$(jq -er '.regressions | numbers' "$response_file")"; then
-            echo "A resposta do regression gate é inválida."
-            exit 1
-          fi
+          echo "Resultado retornado pelo regression gate:"
+          jq . <<< "$gate_json"
 
+          regressions="$(jq -r '.regressions' <<< "$gate_json")"
           echo "Quantidade de regressões: $regressions"
 
-          mapfile -t regression_cases < <(jq -r '.regressionCaseIds[]?' "$response_file")
+          mapfile -t regression_cases < <(jq -r '.regressionCaseIds[]' <<< "$gate_json")
           if (( ${#regression_cases[@]} > 0 )); then
             echo "Casos com regressão:"
             printf '  - %s\n' "${regression_cases[@]}"
           fi
 
-          if [[ "$http_status" == "409" ]]; then
+          if (( gate_exit == 0 )); then
+            echo "Resultado final: gate aprovado."
+          else
             echo "Resultado final: gate reprovado."
-            exit 1
           fi
 
-          echo "Resultado final: gate aprovado."
+          exit "$gate_exit"
