@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PromptBench.Api\PromptBench.Api.csproj" />
+    <ProjectReference Include="..\..\src\PromptBench.Cli\PromptBench.Cli.csproj"
+                      Aliases="PromptBenchCli" />
   </ItemGroup>
 
 </Project>

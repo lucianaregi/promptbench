@@ -115,11 +115,21 @@ public sealed class RunStore
         }
     }
 
-    public async Task<RunLoadResult> LoadAsync(
+    public Task<RunLoadResult> LoadAsync(
         Guid id,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        LoadPathAsync(GetPath(id), id, cancellationToken);
+
+    public Task<RunLoadResult> LoadFileAsync(
+        string path,
+        CancellationToken cancellationToken = default) =>
+        LoadPathAsync(path, expectedId: null, cancellationToken);
+
+    private static async Task<RunLoadResult> LoadPathAsync(
+        string path,
+        Guid? expectedId,
+        CancellationToken cancellationToken)
     {
-        var path = GetPath(id);
 
         if (!File.Exists(path))
         {
@@ -135,7 +145,7 @@ public sealed class RunStore
                 !root.Value.TryGetProperty("id", out var storedId) ||
                 storedId.ValueKind is not JsonValueKind.String ||
                 !Guid.TryParse(storedId.GetString(), out var parsedId) ||
-                parsedId != id)
+                expectedId is { } id && parsedId != id)
             {
                 return RunLoadResult.Invalid();
             }

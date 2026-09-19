@@ -12,12 +12,27 @@ public sealed class PersistedRunComparisonService
         _runStore = runStore;
     }
 
-    public async Task<PersistedRunComparisonOutcome> CompareAsync(
+    public Task<PersistedRunComparisonOutcome> CompareAsync(
         Guid baselineId,
         Guid candidateId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        CompareLoadedAsync(
+            _runStore.LoadAsync(baselineId, cancellationToken),
+            () => _runStore.LoadAsync(candidateId, cancellationToken));
+
+    public Task<PersistedRunComparisonOutcome> CompareFilesAsync(
+        string baselinePath,
+        string candidatePath,
+        CancellationToken cancellationToken = default) =>
+        CompareLoadedAsync(
+            _runStore.LoadFileAsync(baselinePath, cancellationToken),
+            () => _runStore.LoadFileAsync(candidatePath, cancellationToken));
+
+    private static async Task<PersistedRunComparisonOutcome> CompareLoadedAsync(
+        Task<RunLoadResult> baselineLoadTask,
+        Func<Task<RunLoadResult>> loadCandidate)
     {
-        var baselineLoad = await _runStore.LoadAsync(baselineId, cancellationToken);
+        var baselineLoad = await baselineLoadTask;
 
         if (baselineLoad.Status is RunLoadStatus.NotFound)
         {
@@ -29,7 +44,7 @@ public sealed class PersistedRunComparisonService
             return PersistedRunComparisonOutcome.InvalidStorage();
         }
 
-        var candidateLoad = await _runStore.LoadAsync(candidateId, cancellationToken);
+        var candidateLoad = await loadCandidate();
 
         if (candidateLoad.Status is RunLoadStatus.NotFound)
         {

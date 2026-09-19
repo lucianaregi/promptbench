@@ -332,6 +332,40 @@ Quando existem regressões, retorna HTTP 409 Conflict e informa os casos afetado
 
 Somente casos já classificados como `regression` pela comparação histórica fazem o gate falhar. Melhorias, casos sem alteração e casos adicionados ou removidos não provocam falha. `passRate`, duração e tokens não participam da decisão.
 
+### Executar o gate pela linha de comando
+
+O mesmo gate pode ser executado sem iniciar a API HTTP:
+
+```bash
+dotnet run --project src/PromptBench.Cli -- regression-gate \
+  --baseline 11111111-1111-1111-1111-111111111111 \
+  --candidate 22222222-2222-2222-2222-222222222222
+```
+
+Também é possível informar diretamente dois arquivos no formato persistido pelo PromptBench:
+
+```bash
+dotnet run --project src/PromptBench.Cli -- regression-gate \
+  --baseline-file ./runs/baseline.json \
+  --candidate-file ./runs/candidate.json
+```
+
+Use um dos pares de opções por execução; não misture IDs e arquivos.
+
+O CLI procura os arquivos em `runs` no diretório base da aplicação, como a API. Em uma comparação válida, o `stdout` contém somente JSON:
+
+```json
+{
+  "passed": true,
+  "baselineId": "11111111-1111-1111-1111-111111111111",
+  "candidateId": "22222222-2222-2222-2222-222222222222",
+  "regressions": 0,
+  "regressionCaseIds": []
+}
+```
+
+O processo termina com código `0` quando aprovado, `1` quando existem regressões e `2` para erros de uso, leitura ou comparação. Regressões também produzem o JSON completo antes do exit code `1`; diagnósticos do exit code `2` são escritos em pt-BR somente no `stderr`.
+
 ## Relatório Markdown da comparação
 
 O relatório factual da comparação pode ser gerado com:
