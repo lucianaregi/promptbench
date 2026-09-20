@@ -17,12 +17,16 @@ public sealed class PersistedRunReportGeneratorTests
                 baselineId,
                 DateTimeOffset.Parse("2026-09-16T17:30:00Z"),
                 "provedor/modelo-a:free",
-                ["provedor/modelo-a-real"]),
+                ["provedor/modelo-a-real"],
+                "summarization",
+                "v1"),
             new PersistedRunInfo(
                 candidateId,
                 DateTimeOffset.Parse("2026-09-17T09:15:00Z"),
                 "provedor/modelo-b:free",
-                ["provedor/modelo-b-real"]),
+                ["provedor/modelo-b-real"],
+                "summarization",
+                "v2"),
             new PersistedRunComparisonSummary(6, 1, 1, 1, 1, 1, 1),
             new PersistedRunComparisonMetrics(
                 new RunDoubleMetricComparison(60, 40, -20),
@@ -45,6 +49,11 @@ public sealed class PersistedRunReportGeneratorTests
         Assert.Contains(candidateId.ToString(), markdown);
         Assert.Contains("2026-09-16T17:30:00.0000000+00:00", markdown);
         Assert.Contains("provedor/modelo-a-real", markdown);
+        Assert.Contains("- Prompt: `summarization` (`v1`)", markdown);
+        Assert.Contains("- Prompt: `summarization` (`v2`)", markdown);
+        Assert.Contains(
+            "As execuções usam versões diferentes do prompt `summarization`: baseline `v1` e candidate `v2`.",
+            markdown);
         Assert.Contains("Evaluation Set: `summarization-basic`", markdown);
         Assert.Contains("- Regressões: 1", markdown);
         Assert.Contains("- Melhorias: 1", markdown);
@@ -57,5 +66,31 @@ public sealed class PersistedRunReportGeneratorTests
         Assert.Contains("candidate - baseline", markdown);
         Assert.DoesNotContain("vencedor", markdown, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("melhor modelo", markdown, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("melhor prompt", markdown, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void ShowsUnavailablePromptForOldRuns()
+    {
+        var id = Guid.NewGuid();
+        var comparison = new PersistedRunComparisonResult(
+            id,
+            id,
+            "summarization-basic",
+            new PersistedRunInfo(id, DateTimeOffset.UnixEpoch, "modelo", []),
+            new PersistedRunInfo(id, DateTimeOffset.UnixEpoch, "modelo", []),
+            new PersistedRunComparisonSummary(0, 0, 0, 0, 0, 0, 0),
+            new PersistedRunComparisonMetrics(
+                new RunDoubleMetricComparison(null, null, null),
+                new RunLongMetricComparison(null, null, null),
+                new RunLongMetricComparison(null, null, null)),
+            []);
+
+        var markdown = new PersistedRunReportGenerator().Generate(comparison);
+
+        Assert.Equal(2, CountOccurrences(markdown, "- Prompt: Não disponível"));
+    }
+
+    private static int CountOccurrences(string value, string text) =>
+        value.Split(text, StringSplitOptions.None).Length - 1;
 }

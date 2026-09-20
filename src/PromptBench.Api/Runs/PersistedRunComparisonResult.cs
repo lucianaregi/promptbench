@@ -8,7 +8,16 @@ public sealed record PersistedRunComparisonResult(
     PersistedRunInfo Candidate,
     PersistedRunComparisonSummary Summary,
     PersistedRunComparisonMetrics Metrics,
-    IReadOnlyList<PersistedRunCaseComparison> Cases);
+    IReadOnlyList<PersistedRunCaseComparison> Cases)
+{
+    public string? BaselinePromptName => Baseline.PromptName;
+
+    public string? BaselinePromptVersion => Baseline.PromptVersion;
+
+    public string? CandidatePromptName => Candidate.PromptName;
+
+    public string? CandidatePromptVersion => Candidate.PromptVersion;
+}
 
 public sealed record PersistedRunInfo(
     Guid Id,

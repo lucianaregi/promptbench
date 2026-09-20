@@ -59,6 +59,10 @@ public sealed class PersistedRunComparisonServiceTests
         Assert.Equal(100, result.Metrics.TotalTokens.Baseline);
         Assert.Equal(120, result.Metrics.TotalTokens.Candidate);
         Assert.Equal(20, result.Metrics.TotalTokens.Difference);
+        Assert.Null(result.BaselinePromptName);
+        Assert.Null(result.BaselinePromptVersion);
+        Assert.Null(result.CandidatePromptName);
+        Assert.Null(result.CandidatePromptVersion);
     }
 
     [Fact]
@@ -126,6 +130,11 @@ public sealed class PersistedRunComparisonServiceTests
         Assert.Equal("v2", outcome.Result?.Candidate.PromptVersion);
         Assert.Equal("summarization", outcome.Result?.Baseline.PromptName);
         Assert.Equal("summarization", outcome.Result?.Candidate.PromptName);
+        Assert.Equal("summarization", outcome.Result?.BaselinePromptName);
+        Assert.Equal("v1", outcome.Result?.BaselinePromptVersion);
+        Assert.Equal("summarization", outcome.Result?.CandidatePromptName);
+        Assert.Equal("v2", outcome.Result?.CandidatePromptVersion);
+        Assert.True(new RegressionGateService().Evaluate(outcome.Result!).Passed);
     }
 
     [Fact]

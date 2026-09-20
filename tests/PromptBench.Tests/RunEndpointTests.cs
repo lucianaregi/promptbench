@@ -71,13 +71,21 @@ public sealed class RunEndpointTests
             "summarization-basic",
             300,
             20,
-            ("biblioteca-aos-domingos", true));
+            ("biblioteca-aos-domingos", true)) with
+        {
+            PromptName = "summarization",
+            PromptVersion = "v1"
+        };
         var candidate = PersistedRunComparisonServiceTests.CreateRun(
             Guid.NewGuid(),
             "summarization-basic",
             350,
             22,
-            ("biblioteca-aos-domingos", false));
+            ("biblioteca-aos-domingos", false)) with
+        {
+            PromptName = "summarization",
+            PromptVersion = "v2"
+        };
         await store.SaveAsync(baseline);
         await store.SaveAsync(candidate);
         await using var factory = new RunStoreApiFactory(directory.Path);
@@ -90,6 +98,10 @@ public sealed class RunEndpointTests
         Assert.NotNull(comparison);
         Assert.Equal(1, comparison.Summary.Regressions);
         Assert.Equal("regression", Assert.Single(comparison.Cases).Status);
+        Assert.Equal("summarization", comparison.BaselinePromptName);
+        Assert.Equal("v1", comparison.BaselinePromptVersion);
+        Assert.Equal("summarization", comparison.CandidatePromptName);
+        Assert.Equal("v2", comparison.CandidatePromptVersion);
     }
 
     [Fact]

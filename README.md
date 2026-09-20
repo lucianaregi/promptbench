@@ -321,7 +321,7 @@ Os casos são associados por `caseId`. O resultado usa `unchanged_pass` quando a
 
 O resumo informa as quantidades de cada classificação. As métricas apresentam valores de baseline, candidate e a diferença `candidate - baseline` para taxa de aprovação, duração e total de tokens, quando disponíveis. Esses valores não produzem ranking nem escolhem um modelo vencedor.
 
-As duas execuções precisam ser do tipo `evaluation_run`, pertencer ao mesmo Evaluation Set e possuir um resultado de avaliação concluído para cada caso. As identidades dos prompts usados pelo baseline e candidate são expostas separadamente, e versões diferentes podem ser comparadas. Comparações multi-modelo persistidas ou runs sem `passed` possuem dados insuficientes para esta operação.
+As duas execuções precisam ser do tipo `evaluation_run`, pertencer ao mesmo Evaluation Set e possuir um resultado de avaliação concluído para cada caso. O resultado expõe `baselinePromptName`, `baselinePromptVersion`, `candidatePromptName` e `candidatePromptVersion`; em runs antigos, esses campos podem ser `null`. Versões diferentes podem ser comparadas e essa diferença não é classificada como regressão. Comparações multi-modelo persistidas ou runs sem `passed` possuem dados insuficientes para esta operação.
 
 ## Gate de regressão
 

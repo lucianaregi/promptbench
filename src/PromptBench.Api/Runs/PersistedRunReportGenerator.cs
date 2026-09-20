@@ -16,6 +16,7 @@ public sealed class PersistedRunReportGenerator
         report.AppendLine();
         AppendRunDetails(report, "Baseline", comparison.Baseline);
         AppendRunDetails(report, "Candidate", comparison.Candidate);
+        AppendPromptVersionNote(report, comparison);
 
         report.AppendLine("## Resumo");
         report.AppendLine();
@@ -96,15 +97,44 @@ public sealed class PersistedRunReportGenerator
         report.AppendLine($"- ID: `{run.Id:D}`");
         report.AppendLine($"- Data: {run.StartedAt:O}");
         report.AppendLine($"- Modelo solicitado: `{EscapeInline(run.RequestedModel)}`");
-        if (run.PromptName is not null && run.PromptVersion is not null)
-        {
-            report.AppendLine(
-                $"- Prompt: `{EscapeInline(run.PromptName)}` (`{EscapeInline(run.PromptVersion)}`)");
-        }
+        report.AppendLine($"- Prompt: {FormatPrompt(run.PromptName, run.PromptVersion)}");
         report.AppendLine(
             $"- Modelos utilizados: {FormatModels(run.UsedModels, run.RequestedModel)}");
         report.AppendLine();
     }
+
+    private static void AppendPromptVersionNote(
+        StringBuilder report,
+        PersistedRunComparisonResult comparison)
+    {
+        if (comparison.BaselinePromptName is null ||
+            comparison.BaselinePromptVersion is null ||
+            comparison.CandidatePromptName is null ||
+            comparison.CandidatePromptVersion is null ||
+            !string.Equals(
+                comparison.BaselinePromptName,
+                comparison.CandidatePromptName,
+                StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(
+                comparison.BaselinePromptVersion,
+                comparison.CandidatePromptVersion,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        report.AppendLine(
+            $"As execuções usam versões diferentes do prompt " +
+            $"`{EscapeInline(comparison.BaselinePromptName)}`: " +
+            $"baseline `{EscapeInline(comparison.BaselinePromptVersion)}` e " +
+            $"candidate `{EscapeInline(comparison.CandidatePromptVersion)}`.");
+        report.AppendLine();
+    }
+
+    private static string FormatPrompt(string? name, string? version) =>
+        name is null || version is null
+            ? "Não disponível"
+            : $"`{EscapeInline(name)}` (`{EscapeInline(version)}`)";
 
     private static string FormatModels(
         IReadOnlyList<string> usedModels,
