@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using PromptBench.Api.Comparisons;
 using PromptBench.Api.Evals;
 using PromptBench.Api.OpenRouter;
+using PromptBench.Api.Prompts;
 using PromptBench.Api.Runs;
 
 namespace PromptBench.Tests;
@@ -134,10 +135,15 @@ public sealed class LlmJudgeEvaluatorTests
             Cases = [Case]
         };
 
-        var run = await runner.RunAsync(evaluationSet, "provedor/modelo-a");
+        var prompt = new PromptDefinition(
+            "summarization",
+            "v1",
+            "Resuma o texto a seguir de forma objetiva:\n\n{{input}}");
+        var run = await runner.RunAsync(evaluationSet, "provedor/modelo-a", prompt);
         var comparison = await comparisonRunner.RunAsync(
             evaluationSet,
-            ["provedor/modelo-a", "provedor/modelo-b"]);
+            ["provedor/modelo-a", "provedor/modelo-b"],
+            prompt);
 
         Assert.True(Assert.Single(run.Results).Evaluation?.Passed);
         Assert.Equal("completed", comparison.Status);

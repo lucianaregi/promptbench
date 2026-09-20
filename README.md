@@ -73,6 +73,20 @@ Um Evaluation Set reúne casos de entrada e o resultado esperado para avaliaçõ
 
 O repositório inclui o exemplo funcional `evals/summarization-basic.json`.
 
+## Prompts versionados
+
+Os prompts ficam em `prompts/` e são identificados explicitamente por `name` e `version`. Cada arquivo usa este formato:
+
+```json
+{
+  "name": "summarization",
+  "version": "v1",
+  "template": "Resuma o texto a seguir de forma objetiva:\n\n{{input}}"
+}
+```
+
+`name`, `version` e `template` são obrigatórios, a combinação de nome e versão deve ser única e o template precisa conter `{{input}}`. Durante a execução, essa variável é substituída pelo input de cada caso. O exemplo disponível no repositório é `prompts/summarization-v1.json`.
+
 ## Avaliação com LLM-as-a-judge
 
 Um Evaluation Set pode configurar o evaluator `llm_judge` para que um segundo modelo avalie cada output produzido. O modelo judge é sempre informado explicitamente; o PromptBench não escolhe modelos automaticamente.
@@ -126,6 +140,7 @@ O `llm_judge` funciona tanto nas execuções individuais quanto nas comparaçõe
 - `GET /health` — confirma que a API está funcionando.
 - `GET /evals` — lista nome, descrição e quantidade de casos dos evals válidos.
 - `GET /evals/{name}` — retorna o eval completo; responde 404 quando ele não existe e 422 quando o arquivo é inválido.
+- `GET /prompts` — lista os prompts versionados disponíveis.
 - `POST /evals/{name}/runs` — executa sequencialmente todos os casos do eval no modelo OpenRouter informado.
 - `POST /evals/{name}/comparisons` — coloca lado a lado as execuções do mesmo eval em pelo menos dois modelos distintos.
 - `GET /runs` — lista resumos das execuções persistidas, da mais recente para a mais antiga.
@@ -136,14 +151,16 @@ O `llm_judge` funciona tanto nas execuções individuais quanto nas comparaçõe
 
 ### Executar um Evaluation Set
 
-O modelo é obrigatório e não possui valor padrão:
+O modelo, o nome do prompt e sua versão são obrigatórios e não possuem valores padrão:
 
 ```http
 POST /evals/summarization-basic/runs
 Content-Type: application/json
 
 {
-  "model": "provider/model"
+  "model": "provider/model",
+  "promptName": "summarization",
+  "promptVersion": "v1"
 }
 ```
 
@@ -153,6 +170,8 @@ Resposta resumida:
 {
   "evaluation": "summarization-basic",
   "requestedModel": "provider/model",
+  "promptName": "summarization",
+  "promptVersion": "v1",
   "startedAt": "2026-09-16T12:00:00Z",
   "durationMs": 1234,
   "results": [
@@ -190,7 +209,7 @@ Em outro terminal, execute o Evaluation Set existente com um modelo gratuito inf
 ```bash
 curl -X POST http://localhost:5146/evals/summarization-basic/runs \
   -H "Content-Type: application/json" \
-  -d '{"model":"qwen/qwen3-4b:free"}'
+  -d '{"model":"qwen/qwen3-4b:free","promptName":"summarization","promptVersion":"v1"}'
 ```
 
 A disponibilidade de modelos gratuitos pode mudar; confirme o identificador no catálogo do OpenRouter antes do teste.
@@ -207,7 +226,9 @@ Content-Type: application/json
   "models": [
     "provider/modelo-a:free",
     "provider/modelo-b:free"
-  ]
+  ],
+  "promptName": "summarization",
+  "promptVersion": "v1"
 }
 ```
 
@@ -221,6 +242,8 @@ Resposta resumida:
   "startedAt": "2026-09-16T15:00:00Z",
   "durationMs": 2500,
   "status": "partial",
+  "promptName": "summarization",
+  "promptVersion": "v1",
   "runs": [
     {
       "requestedModel": "provider/modelo-a:free",
@@ -266,7 +289,7 @@ Modelos gratuitos podem ter disponibilidade e rate limits diferentes. O PromptBe
 
 Ao concluir com sucesso um run individual ou uma comparação, o PromptBench gera um `Guid`, inclui esse valor no campo `id` da resposta e salva o mesmo resultado completo como JSON. O campo `type` distingue `evaluation_run` de `comparison`.
 
-Os arquivos são gravados assincronamente em `runs/<id>.json`, dentro do diretório base da aplicação. O caminho é resolvido com `AppContext.BaseDirectory`, portanto não depende do current working directory. Resultados de casos, evaluators, LLM-as-a-judge, modelos, métricas, status e falhas presentes na resposta são preservados no arquivo.
+Os arquivos são gravados assincronamente em `runs/<id>.json`, dentro do diretório base da aplicação. O caminho é resolvido com `AppContext.BaseDirectory`, portanto não depende do current working directory. Resultados de casos, evaluators, LLM-as-a-judge, modelos, métricas, status, falhas e a identidade `promptName`/`promptVersion` são preservados no arquivo. Runs anteriores à introdução desses campos continuam legíveis e podem apresentá-los como `null`.
 
 Para listar resumos sem carregar outputs e resultados detalhados:
 
@@ -298,7 +321,7 @@ Os casos são associados por `caseId`. O resultado usa `unchanged_pass` quando a
 
 O resumo informa as quantidades de cada classificação. As métricas apresentam valores de baseline, candidate e a diferença `candidate - baseline` para taxa de aprovação, duração e total de tokens, quando disponíveis. Esses valores não produzem ranking nem escolhem um modelo vencedor.
 
-As duas execuções precisam ser do tipo `evaluation_run`, pertencer ao mesmo Evaluation Set e possuir um resultado de avaliação concluído para cada caso. Comparações multi-modelo persistidas ou runs sem `passed` possuem dados insuficientes para esta operação.
+As duas execuções precisam ser do tipo `evaluation_run`, pertencer ao mesmo Evaluation Set e possuir um resultado de avaliação concluído para cada caso. As identidades dos prompts usados pelo baseline e candidate são expostas separadamente, e versões diferentes podem ser comparadas. Comparações multi-modelo persistidas ou runs sem `passed` possuem dados insuficientes para esta operação.
 
 ## Gate de regressão
 
@@ -386,6 +409,7 @@ src/
   PromptBench.Api/
     Evals/
     OpenRouter/
+    Prompts/
     Runs/
 tests/
   PromptBench.Tests/

@@ -202,7 +202,9 @@ public sealed class RunStore
             startedAt,
             models,
             status,
-            CalculatePassRate(root, type));
+            CalculatePassRate(root, type),
+            GetOptionalString(root, "promptName"),
+            GetOptionalString(root, "promptVersion"));
         return true;
     }
 
@@ -345,6 +347,13 @@ public sealed class RunStore
         value = property.GetString()!;
         return true;
     }
+
+    private static string? GetOptionalString(JsonElement element, string propertyName) =>
+        element.TryGetProperty(propertyName, out var property) &&
+        property.ValueKind is JsonValueKind.String &&
+        !string.IsNullOrWhiteSpace(property.GetString())
+            ? property.GetString()
+            : null;
 
     private string GetPath(Guid id) =>
         Path.Combine(_runsDirectory, $"{id:D}.json");

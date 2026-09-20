@@ -159,7 +159,9 @@ public sealed class PersistedRunComparisonService
                 .Where(model => !string.IsNullOrWhiteSpace(model))
                 .Select(model => model!)
                 .Distinct(StringComparer.Ordinal)
-                .ToArray());
+                .ToArray(),
+            run.PromptName,
+            run.PromptVersion);
 
     private static bool TryReadRun(JsonElement root, out EvaluationRunResult run)
     {

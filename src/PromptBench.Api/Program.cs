@@ -1,6 +1,7 @@
 using PromptBench.Api.Comparisons;
 using PromptBench.Api.Evals;
 using PromptBench.Api.OpenRouter;
+using PromptBench.Api.Prompts;
 using Microsoft.Extensions.FileProviders;
 using PromptBench.Api.Runs;
 
@@ -23,6 +24,8 @@ builder.Configuration.AddCommandLine(args);
 builder.Services.AddOpenApi();
 builder.Services.AddSingleton(new EvaluationSetLoader(
     Path.Combine(AppContext.BaseDirectory, "evals")));
+builder.Services.AddSingleton(new PromptLoader(
+    Path.Combine(AppContext.BaseDirectory, "prompts")));
 builder.Services.AddSingleton(new RunStore(
     Path.Combine(AppContext.BaseDirectory, "runs")));
 builder.Services.AddSingleton(new ReportStore(
@@ -98,10 +101,30 @@ app.MapGet("/evals/{name}", async (
     .Produces(StatusCodes.Status404NotFound)
     .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
+app.MapGet("/prompts", async (PromptLoader loader, CancellationToken cancellationToken) =>
+    {
+        try
+        {
+            return Results.Ok(await loader.ListAsync(cancellationToken));
+        }
+        catch (InvalidDataException)
+        {
+            return Results.Problem(
+                title: "Prompts inválidos",
+                detail: "Um ou mais prompts não puderam ser carregados.",
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+    })
+    .WithName("ListPrompts")
+    .WithDescription("Lista os prompts versionados disponíveis.")
+    .Produces<IReadOnlyList<PromptDefinition>>()
+    .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
+
 app.MapPost("/evals/{name}/runs", async (
         string name,
         EvaluationRunRequest? request,
         EvaluationSetLoader loader,
+        PromptLoader promptLoader,
         EvaluationRunner runner,
         RunStore runStore,
         CancellationToken cancellationToken) =>
@@ -111,6 +134,16 @@ app.MapPost("/evals/{name}/runs", async (
             return Results.Problem(
                 title: "Requisição inválida",
                 detail: "O campo 'model' é obrigatório.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var promptSelectionError = ValidatePromptSelection(request.PromptName, request.PromptVersion);
+
+        if (promptSelectionError is not null)
+        {
+            return Results.Problem(
+                title: "Requisição inválida",
+                detail: promptSelectionError,
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
@@ -129,11 +162,33 @@ app.MapPost("/evals/{name}/runs", async (
                 statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
+        var promptResult = await promptLoader.LoadAsync(
+            request.PromptName,
+            request.PromptVersion,
+            cancellationToken);
+
+        if (promptResult.Status is PromptLoadStatus.NotFound)
+        {
+            return Results.Problem(
+                title: "Prompt não encontrado",
+                detail: "O prompt e a versão informados não existem.",
+                statusCode: StatusCodes.Status404NotFound);
+        }
+
+        if (promptResult.Status is PromptLoadStatus.Invalid)
+        {
+            return Results.Problem(
+                title: "Prompt inválido",
+                detail: "Um ou mais arquivos de prompt não puderam ser carregados.",
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+
         try
         {
             var result = await runner.RunAsync(
                 loadResult.EvaluationSet!,
                 request.Model,
+                promptResult.Prompt!,
                 cancellationToken);
             await runStore.SaveAsync(result, cancellationToken);
             return Results.Ok(result);
@@ -162,10 +217,21 @@ app.MapPost("/evals/{name}/comparisons", async (
         string name,
         ComparisonRequest? request,
         EvaluationSetLoader loader,
+        PromptLoader promptLoader,
         ComparisonRunner runner,
         RunStore runStore,
         CancellationToken cancellationToken) =>
     {
+        var promptSelectionError = ValidatePromptSelection(request?.PromptName, request?.PromptVersion);
+
+        if (promptSelectionError is not null)
+        {
+            return Results.Problem(
+                title: "Requisição inválida",
+                detail: promptSelectionError,
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
         var validationError = ValidateModels(request?.Models, out var models);
 
         if (validationError is not null)
@@ -191,9 +257,31 @@ app.MapPost("/evals/{name}/comparisons", async (
                 statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
+        var promptResult = await promptLoader.LoadAsync(
+            request!.PromptName,
+            request.PromptVersion,
+            cancellationToken);
+
+        if (promptResult.Status is PromptLoadStatus.NotFound)
+        {
+            return Results.Problem(
+                title: "Prompt não encontrado",
+                detail: "O prompt e a versão informados não existem.",
+                statusCode: StatusCodes.Status404NotFound);
+        }
+
+        if (promptResult.Status is PromptLoadStatus.Invalid)
+        {
+            return Results.Problem(
+                title: "Prompt inválido",
+                detail: "Um ou mais arquivos de prompt não puderam ser carregados.",
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+
         var result = await runner.RunAsync(
             loadResult.EvaluationSet!,
             models,
+            promptResult.Prompt!,
             cancellationToken);
 
         try
@@ -463,6 +551,18 @@ static string? ValidateModels(IReadOnlyList<string>? requestedModels, out IReadO
 
     models = normalizedModels;
     return null;
+}
+
+static string? ValidatePromptSelection(string? promptName, string? promptVersion)
+{
+    if (string.IsNullOrWhiteSpace(promptName))
+    {
+        return "O campo 'promptName' é obrigatório.";
+    }
+
+    return string.IsNullOrWhiteSpace(promptVersion)
+        ? "O campo 'promptVersion' é obrigatório."
+        : null;
 }
 
 

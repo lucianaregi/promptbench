@@ -1,0 +1,5 @@
+{
+  "name": "summarization",
+  "version": "v1",
+  "template": "Resuma o texto a seguir de forma objetiva:\n\n{{input}}"
+}

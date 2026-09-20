@@ -15,11 +15,18 @@ Accept: application/json
 
 ###
 
+GET {{PromptBench.Api_HostAddress}}/prompts
+Accept: application/json
+
+###
+
 POST {{PromptBench.Api_HostAddress}}/evals/summarization-basic/runs
 Content-Type: application/json
 
 {
-  "model": "qwen/qwen3-4b:free"
+  "model": "qwen/qwen3-4b:free",
+  "promptName": "summarization",
+  "promptVersion": "v1"
 }
 
 ###
@@ -30,7 +37,9 @@ Content-Type: application/json
   "models": [
     "provider/model-a:free",
     "provider/model-b:free"
-  ]
+  ],
+  "promptName": "summarization",
+  "promptVersion": "v1"
 }
 
 ###

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using PromptBench.Api.Evals;
 using PromptBench.Api.OpenRouter;
+using PromptBench.Api.Prompts;
 
 namespace PromptBench.Api.Runs;
 
@@ -20,6 +21,7 @@ public sealed class EvaluationRunner
     public async Task<EvaluationRunResult> RunAsync(
         EvaluationSet evaluationSet,
         string model,
+        PromptDefinition prompt,
         CancellationToken cancellationToken = default)
     {
         var startedAt = DateTimeOffset.UtcNow;
@@ -31,7 +33,7 @@ public sealed class EvaluationRunner
             var caseStarted = Stopwatch.GetTimestamp();
             var completion = await _openRouterClient.CompleteAsync(
                 model,
-                evaluationCase.Input,
+                Render(prompt.Template, evaluationCase.Input),
                 cancellationToken);
 
             var generationDurationMs = ElapsedMilliseconds(caseStarted);
@@ -60,8 +62,13 @@ public sealed class EvaluationRunner
             model,
             startedAt,
             ElapsedMilliseconds(runStarted),
-            results);
+            results,
+            prompt.Name,
+            prompt.Version);
     }
+
+    private static string Render(string template, string input) =>
+        template.Replace("{{input}}", input, StringComparison.Ordinal);
 
     private static long ElapsedMilliseconds(long started) =>
         (long)Math.Round(Stopwatch.GetElapsedTime(started).TotalMilliseconds);

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using PromptBench.Api.Evals;
 using PromptBench.Api.OpenRouter;
 using PromptBench.Api.Runs;
+using PromptBench.Api.Prompts;
 
 namespace PromptBench.Api.Comparisons;
 
@@ -17,6 +18,7 @@ public sealed class ComparisonRunner
     public async Task<ComparisonResult> RunAsync(
         EvaluationSet evaluationSet,
         IReadOnlyList<string> models,
+        PromptDefinition prompt,
         CancellationToken cancellationToken = default)
     {
         var startedAt = DateTimeOffset.UtcNow;
@@ -32,6 +34,7 @@ public sealed class ComparisonRunner
                 var run = await _evaluationRunner.RunAsync(
                     evaluationSet,
                     model,
+                    prompt,
                     cancellationToken);
 
                 runs.Add(CreateCompletedRun(run));
@@ -66,7 +69,9 @@ public sealed class ComparisonRunner
             startedAt,
             ElapsedMilliseconds(comparisonStarted),
             status,
-            runs);
+            runs,
+            prompt.Name,
+            prompt.Version);
     }
 
     private static ComparisonRunResult CreateCompletedRun(EvaluationRunResult run)

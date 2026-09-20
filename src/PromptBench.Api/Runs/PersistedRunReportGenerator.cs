@@ -96,6 +96,11 @@ public sealed class PersistedRunReportGenerator
         report.AppendLine($"- ID: `{run.Id:D}`");
         report.AppendLine($"- Data: {run.StartedAt:O}");
         report.AppendLine($"- Modelo solicitado: `{EscapeInline(run.RequestedModel)}`");
+        if (run.PromptName is not null && run.PromptVersion is not null)
+        {
+            report.AppendLine(
+                $"- Prompt: `{EscapeInline(run.PromptName)}` (`{EscapeInline(run.PromptVersion)}`)");
+        }
         report.AppendLine(
             $"- Modelos utilizados: {FormatModels(run.UsedModels, run.RequestedModel)}");
         report.AppendLine();

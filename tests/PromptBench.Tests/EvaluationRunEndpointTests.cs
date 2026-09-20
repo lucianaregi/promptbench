@@ -10,6 +10,32 @@ namespace PromptBench.Tests;
 public sealed class EvaluationRunEndpointTests
 {
     [Fact]
+    public async Task RequiresExplicitPromptIdentity()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/evals/summarization-basic/runs",
+            new { model = "provider/model" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ReturnsNotFoundForUnknownPromptVersion()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/evals/summarization-basic/runs",
+            new EvaluationRunRequest("provider/model", "summarization", "v99"));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ReturnsNotFoundForMissingEvaluationSet()
     {
         await using var factory = new WebApplicationFactory<Program>();
@@ -17,7 +43,7 @@ public sealed class EvaluationRunEndpointTests
 
         var response = await client.PostAsJsonAsync(
             "/evals/does-not-exist/runs",
-            new EvaluationRunRequest("provider/model"));
+            new EvaluationRunRequest("provider/model", "summarization", "v1"));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -56,13 +82,15 @@ public sealed class EvaluationRunEndpointTests
 
         var response = await client.PostAsJsonAsync(
             "/evals/summarization-basic/runs",
-            new EvaluationRunRequest("provider/model"));
+            new EvaluationRunRequest("provider/model", "summarization", "v1"));
         var result = await response.Content.ReadFromJsonAsync<EvaluationRunResult>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(result);
         Assert.Equal("summarization-basic", result.Evaluation);
         Assert.Equal("provider/model", result.RequestedModel);
+        Assert.Equal("summarization", result.PromptName);
+        Assert.Equal("v1", result.PromptVersion);
         Assert.Equal(2, result.Results.Count);
         Assert.All(result.Results, item =>
         {
@@ -73,6 +101,7 @@ public sealed class EvaluationRunEndpointTests
             Assert.True(item.Evaluation?.Passed);
         });
         Assert.Equal(2, prompts.Count);
+        Assert.All(prompts, prompt => Assert.StartsWith("Resuma o texto", prompt));
         Assert.Contains("biblioteca", prompts[0], StringComparison.OrdinalIgnoreCase);
         Assert.Contains("chuva", prompts[1], StringComparison.OrdinalIgnoreCase);
     }
@@ -87,7 +116,7 @@ public sealed class EvaluationRunEndpointTests
 
         var result = await client.PostAsJsonAsync(
             "/evals/summarization-basic/runs",
-            new EvaluationRunRequest("provider/model"));
+            new EvaluationRunRequest("provider/model", "summarization", "v1"));
         var body = await result.Content.ReadFromJsonAsync<EvaluationRunResult>();
 
         Assert.NotNull(body);
@@ -107,7 +136,7 @@ public sealed class EvaluationRunEndpointTests
 
         var response = await client.PostAsJsonAsync(
             "/evals/summarization-basic/runs",
-            new EvaluationRunRequest("provedor/modelo"));
+            new EvaluationRunRequest("provedor/modelo", "summarization", "v1"));
         var created = await response.Content.ReadFromJsonAsync<EvaluationRunResult>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -118,6 +147,8 @@ public sealed class EvaluationRunEndpointTests
         Assert.Equal(HttpStatusCode.OK, storedResponse.StatusCode);
         Assert.NotNull(stored);
         Assert.Equal(created.Id, stored.Id);
+        Assert.Equal("summarization", stored.PromptName);
+        Assert.Equal("v1", stored.PromptVersion);
         Assert.Equal(created.Results, stored.Results);
     }
 
@@ -131,7 +162,7 @@ public sealed class EvaluationRunEndpointTests
 
         var response = await client.PostAsJsonAsync(
             "/evals/summarization-basic/runs",
-            new EvaluationRunRequest("provider/model"));
+            new EvaluationRunRequest("provider/model", "summarization", "v1"));
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }

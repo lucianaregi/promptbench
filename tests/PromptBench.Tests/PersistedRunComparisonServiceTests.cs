@@ -99,6 +99,36 @@ public sealed class PersistedRunComparisonServiceTests
     }
 
     [Fact]
+    public async Task ComparesDifferentPromptVersionsAndExposesTheirIdentity()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new RunStore(directory.Path);
+        var baseline = CreateRun(
+            Guid.NewGuid(), "resumos", 300, 20, ("caso", true)) with
+        {
+            PromptName = "summarization",
+            PromptVersion = "v1"
+        };
+        var candidate = CreateRun(
+            Guid.NewGuid(), "resumos", 300, 20, ("caso", true)) with
+        {
+            PromptName = "summarization",
+            PromptVersion = "v2"
+        };
+        await store.SaveAsync(baseline);
+        await store.SaveAsync(candidate);
+        var service = new PersistedRunComparisonService(store);
+
+        var outcome = await service.CompareAsync(baseline.Id, candidate.Id);
+
+        Assert.Equal(PersistedRunComparisonStatus.Success, outcome.Status);
+        Assert.Equal("v1", outcome.Result?.Baseline.PromptVersion);
+        Assert.Equal("v2", outcome.Result?.Candidate.PromptVersion);
+        Assert.Equal("summarization", outcome.Result?.Baseline.PromptName);
+        Assert.Equal("summarization", outcome.Result?.Candidate.PromptName);
+    }
+
+    [Fact]
     public async Task RejectsRunWithoutCompletedEvaluations()
     {
         using var directory = new TemporaryDirectory();

@@ -8,7 +8,9 @@ public sealed record ComparisonResult(
     DateTimeOffset StartedAt,
     long DurationMs,
     string Status,
-    IReadOnlyList<ComparisonRunResult> Runs) : IPersistedRunResult
+    IReadOnlyList<ComparisonRunResult> Runs,
+    string? PromptName = null,
+    string? PromptVersion = null) : IPersistedRunResult
 {
     public string Type => "comparison";
 }

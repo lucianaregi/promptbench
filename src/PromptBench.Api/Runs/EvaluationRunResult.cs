@@ -8,7 +8,9 @@ public sealed record EvaluationRunResult(
     string RequestedModel,
     DateTimeOffset StartedAt,
     long DurationMs,
-    IReadOnlyList<EvaluationCaseRunResult> Results) : IPersistedRunResult
+    IReadOnlyList<EvaluationCaseRunResult> Results,
+    string? PromptName = null,
+    string? PromptVersion = null) : IPersistedRunResult
 {
     public string Type => "evaluation_run";
 }

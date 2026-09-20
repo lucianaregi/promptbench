@@ -14,7 +14,9 @@ public sealed record PersistedRunInfo(
     Guid Id,
     DateTimeOffset StartedAt,
     string RequestedModel,
-    IReadOnlyList<string> UsedModels);
+    IReadOnlyList<string> UsedModels,
+    string? PromptName = null,
+    string? PromptVersion = null);
 
 public sealed record PersistedRunComparisonSummary(
     int Total,

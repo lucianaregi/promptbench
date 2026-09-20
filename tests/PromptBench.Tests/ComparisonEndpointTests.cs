@@ -24,7 +24,7 @@ public sealed class ComparisonEndpointTests
 
         var response = await client.PostAsJsonAsync(
             "/evals/summarization-basic/comparisons",
-            new ComparisonRequest(models));
+            new ComparisonRequest(models, "summarization", "v1"));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -37,7 +37,7 @@ public sealed class ComparisonEndpointTests
 
         var response = await client.PostAsJsonAsync(
             "/evals/inexistente/comparisons",
-            new ComparisonRequest(["provedor/modelo-a", "provedor/modelo-b"]));
+            new ComparisonRequest(["provedor/modelo-a", "provedor/modelo-b"], "summarization", "v1"));
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -76,12 +76,14 @@ public sealed class ComparisonEndpointTests
 
         var response = await client.PostAsJsonAsync(
             "/evals/summarization-basic/comparisons",
-            new ComparisonRequest(["provedor/modelo-a", "provedor/modelo-b"]));
+            new ComparisonRequest(["provedor/modelo-a", "provedor/modelo-b"], "summarization", "v1"));
         var comparison = await response.Content.ReadFromJsonAsync<ComparisonResult>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(comparison);
         Assert.Equal("completed", comparison.Status);
+        Assert.Equal("summarization", comparison.PromptName);
+        Assert.Equal("v1", comparison.PromptVersion);
         Assert.Collection(
             comparison.Runs,
             first =>
@@ -127,7 +129,7 @@ public sealed class ComparisonEndpointTests
 
         var response = await client.PostAsJsonAsync(
             "/evals/summarization-basic/comparisons",
-            new ComparisonRequest(["provedor/modelo-a", "provedor/modelo-b"]));
+            new ComparisonRequest(["provedor/modelo-a", "provedor/modelo-b"], "summarization", "v1"));
         var created = await response.Content.ReadFromJsonAsync<ComparisonResult>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -138,6 +140,8 @@ public sealed class ComparisonEndpointTests
         Assert.Equal(HttpStatusCode.OK, storedResponse.StatusCode);
         Assert.NotNull(stored);
         Assert.Equal(created.Id, stored.Id);
+        Assert.Equal("summarization", stored.PromptName);
+        Assert.Equal("v1", stored.PromptVersion);
         Assert.Equal(created.Runs.Count, stored.Runs.Count);
         Assert.Equal(
             created.Runs.Select(run => run.Id),
@@ -174,7 +178,7 @@ public sealed class ComparisonEndpointTests
 
         var response = await client.PostAsJsonAsync(
             "/evals/summarization-basic/comparisons",
-            new ComparisonRequest(["provedor/modelo-limitado", "provedor/modelo-disponivel"]));
+            new ComparisonRequest(["provedor/modelo-limitado", "provedor/modelo-disponivel"], "summarization", "v1"));
         var comparison = await response.Content.ReadFromJsonAsync<ComparisonResult>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -200,7 +204,7 @@ public sealed class ComparisonEndpointTests
 
         var response = await client.PostAsJsonAsync(
             "/evals/summarization-basic/comparisons",
-            new ComparisonRequest(["provedor/modelo-a", "provedor/modelo-b"]));
+            new ComparisonRequest(["provedor/modelo-a", "provedor/modelo-b"], "summarization", "v1"));
         var comparison = await response.Content.ReadFromJsonAsync<ComparisonResult>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

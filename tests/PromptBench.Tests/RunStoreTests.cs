@@ -25,6 +25,8 @@ public sealed class RunStoreTests
         Assert.NotNull(restored);
         Assert.Equal(id, restored.Id);
         Assert.Equal("summarization-basic", restored.Evaluation);
+        Assert.Equal("summarization", restored.PromptName);
+        Assert.Equal("v1", restored.PromptVersion);
         var caseResult = Assert.Single(restored.Results);
         Assert.Equal("A biblioteca agora abre aos domingos.", caseResult.Output);
         Assert.True(caseResult.Evaluation?.Passed);
@@ -74,6 +76,8 @@ public sealed class RunStoreTests
         Assert.Equal(["provedor/modelo:free"], summary.Models);
         Assert.Equal("completed", summary.Status);
         Assert.Equal(100, summary.PassRate);
+        Assert.Equal("summarization", summary.PromptName);
+        Assert.Equal("v1", summary.PromptVersion);
     }
 
     [Fact]
@@ -166,6 +170,36 @@ public sealed class RunStoreTests
         Assert.Null(result.Result);
     }
 
+    [Fact]
+    public async Task LoadsOldRunWithoutPromptIdentity()
+    {
+        using var directory = new TemporaryDirectory();
+        var id = Guid.NewGuid();
+        await File.WriteAllTextAsync(
+            System.IO.Path.Combine(directory.Path, $"{id:D}.json"),
+            $$"""
+            {
+              "id": "{{id:D}}",
+              "type": "evaluation_run",
+              "evaluation": "summarization-basic",
+              "requestedModel": "provedor/modelo:free",
+              "startedAt": "2026-09-16T12:00:00Z",
+              "durationMs": 450,
+              "results": []
+            }
+            """);
+        var store = new RunStore(directory.Path);
+
+        var loaded = await store.LoadAsync(id);
+        var restored = loaded.Result?.Deserialize<EvaluationRunResult>(
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.Equal(RunLoadStatus.Success, loaded.Status);
+        Assert.NotNull(restored);
+        Assert.Null(restored.PromptName);
+        Assert.Null(restored.PromptVersion);
+    }
+
     private static EvaluationRunResult CreateResult(
         Guid id,
         DateTimeOffset? startedAt = null) =>
@@ -194,7 +228,9 @@ public sealed class RunStoreTests
                         150,
                         new TokenUsage(22, 9, 31),
                         null))
-            ]);
+            ],
+            "summarization",
+            "v1");
 
     private static ComparisonRunResult CreateComparisonRun(string model, bool passed) =>
         new(
