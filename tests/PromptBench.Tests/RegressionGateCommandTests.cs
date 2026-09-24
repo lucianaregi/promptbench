@@ -2,7 +2,9 @@ extern alias PromptBenchCli;
 using PromptBench.Api.Runs;
 using System.Text.Json;
 using RegressionGateCommand = PromptBenchCli::PromptBench.Cli.RegressionGateCommand;
+
 namespace PromptBench.Tests;
+
 public sealed class RegressionGateCommandTests
 {
     [Fact]

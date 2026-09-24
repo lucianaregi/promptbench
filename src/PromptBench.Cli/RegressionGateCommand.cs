@@ -1,6 +1,8 @@
 using PromptBench.Api.Runs;
 using System.Text.Json;
+
 namespace PromptBench.Cli;
+
 public static class RegressionGateCommand
 {
     private static readonly JsonSerializerOptions JsonOptions =
