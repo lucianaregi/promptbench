@@ -2,7 +2,7 @@
 
 PromptBench é uma API em desenvolvimento para trabalhar com conjuntos versionados de casos de avaliação de prompts.
 
-Atualmente, a aplicação descobre e valida Evaluation Sets armazenados em JSON, executa cada conjunto em um modelo e compara execuções sequenciais entre vários modelos informados explicitamente por meio do OpenRouter.
+Atualmente, a aplicação descobre e valida Evaluation Sets e prompts versionados armazenados em JSON, executa avaliações por meio do OpenRouter, persiste os resultados localmente e compara execuções históricas para detectar regressões.
 
 ## Stack
 
@@ -25,7 +25,7 @@ dotnet build
 dotnet run --project src/PromptBench.Api
 ```
 
-Configure a chave durante o desenvolvimento em `src/PromptBench.Api/appsettings.Local.json`. O arquivo é opcional, não é versionado e pode ser criado a partir de `appsettings.Local.example.json`:
+Configure a chave durante o desenvolvimento em `src/PromptBench.Api/appsettings.Local.json`. O arquivo é opcional, não é versionado e pode ser criado a partir de `src/PromptBench.Api/appsettings.Local.example.json`:
 
 ```json
 {
@@ -135,6 +135,7 @@ Resultado resumido do evaluator:
 Uma reprovação possui `status` igual a `completed` e `passed` igual a `false`. Se o judge retornar conteúdo inválido, exceder o tempo limite ou falhar no OpenRouter, o resultado terá `status` igual a `failed`, `passed` igual a `null` e detalhes técnicos seguros em `error`. Assim, uma falha do judge não é convertida em reprovação e não elimina o output produzido. Não há retry automático.
 
 O `llm_judge` funciona tanto nas execuções individuais quanto nas comparações. O PromptBench não implementa votação, pesos nem ranking automático dos modelos.
+
 ## Endpoints
 
 - `GET /health` — confirma que a API está funcionando.
@@ -307,7 +308,7 @@ GET /runs/17fcf7ea-a4a4-49ca-8c46-e02b0325d394
 
 O endpoint devolve o mesmo JSON produzido originalmente. Um ID inexistente retorna HTTP 404. Arquivos inválidos ou falhas de leitura retornam um erro controlado, sem expor caminhos internos ou stack traces.
 
-Não há listagem, filtros, paginação nem limpeza automática dos arquivos nesta versão.
+Não há filtros, paginação nem limpeza automática dos arquivos nesta versão.
 
 ## Comparar execuções persistidas
 
@@ -346,10 +347,7 @@ Quando existem regressões, retorna HTTP 409 Conflict e informa os casos afetado
 {
   "passed": false,
   "regressions": 2,
-  "regressionCaseIds": [
-    "biblioteca-aos-domingos",
-    "previsao-do-tempo"
-  ]
+  "regressionCaseIds": ["biblioteca-aos-domingos", "previsao-do-tempo"]
 }
 ```
 
@@ -397,9 +395,18 @@ O relatório factual da comparação pode ser gerado com:
 GET /runs/11111111-1111-1111-1111-111111111111/compare/22222222-2222-2222-2222-222222222222/report
 ```
 
-A resposta usa `text/markdown` e inclui identificação e data das execuções, modelos, resumo, métricas, tabela de casos e uma seção de regressões. Duração e tokens são apresentados sem inferir que valores menores representam maior qualidade. Casos adicionados e removidos permanecem identificados separadamente.
+A resposta usa `text/markdown` e inclui identificação e data das execuções, modelos, prompts e versões, resumo, métricas, tabela de casos e uma seção de regressões. Quando o mesmo prompt usa versões diferentes, essa informação é apresentada de forma factual. Duração e tokens são apresentados sem inferir que valores menores representam maior qualidade. Casos adicionados e removidos permanecem identificados separadamente.
 
 O mesmo conteúdo é salvo em `reports/<baseline-id>_vs_<candidate-id>.md`, dentro do diretório base da aplicação. O caminho não depende do current working directory. Se o arquivo já existir, a API retorna HTTP 409 e não o sobrescreve.
+
+## GitHub Actions
+
+Os workflows são manuais e não executam modelos nem acessam o OpenRouter:
+
+- `Publicar run persistido` (`.github/workflows/publish-run.yml`) valida um arquivo informado por `runFile` e o publica como artifact `promptbench-run-<runId>`;
+- `Regression gate` (`.github/workflows/regression.yml`) recebe os IDs dos workflow runs e dos runs de baseline e candidate, baixa os dois artifacts e executa o gate pelo `PromptBench.Cli`.
+
+O workflow de regressão preserva o exit code do CLI: `0` aprova o job, `1` sinaliza regressões e `2` indica erro de execução ou configuração.
 
 ## Estrutura
 
@@ -411,12 +418,15 @@ src/
     OpenRouter/
     Prompts/
     Runs/
+  PromptBench.Cli/
 tests/
   PromptBench.Tests/
 prompts/
 evals/
+docs/
+.github/workflows/
 ```
 
-## Roadmap
+## Limites atuais
 
-Novos evaluators, scoring agregado, ranking e escolha de vencedor não fazem parte da implementação atual.
+O projeto não implementa banco de dados, frontend, ranking, escolha de vencedor, votação entre judges, pesos ou cálculo de custo.
